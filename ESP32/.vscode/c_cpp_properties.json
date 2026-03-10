@@ -8,12 +8,12 @@
         {
             "name": "PlatformIO",
             "includePath": [
-                "C:/Imperial/FYP-ESP-Test/include",
-                "C:/Imperial/FYP-ESP-Test/src",
+                "C:/Imperial/FYP-Knitted-EMG/ESP32/include",
+                "C:/Imperial/FYP-Knitted-EMG/ESP32/src",
                 "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                 "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
-                "C:/Imperial/FYP-ESP-Test/.pio/libdeps/esp32dev/CircularBuffer",
-                "C:/Imperial/FYP-ESP-Test/.pio/libdeps/esp32dev/ESP32DMASPI",
+                "C:/Imperial/FYP-Knitted-EMG/ESP32/.pio/libdeps/esp32dev/CircularBuffer",
+                "C:/Imperial/FYP-Knitted-EMG/ESP32/.pio/libdeps/esp32dev/ESP32DMASPI",
                 "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32s3/include/newlib/platform_include",
                 "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32s3/include/freertos/include",
                 "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32s3/include/freertos/include/esp_additions/freertos",
@@ -249,12 +249,12 @@
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "path": [
-                    "C:/Imperial/FYP-ESP-Test/include",
-                    "C:/Imperial/FYP-ESP-Test/src",
+                    "C:/Imperial/FYP-Knitted-EMG/ESP32/include",
+                    "C:/Imperial/FYP-Knitted-EMG/ESP32/src",
                     "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/libraries/BLE/src",
                     "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src",
-                    "C:/Imperial/FYP-ESP-Test/.pio/libdeps/esp32dev/CircularBuffer",
-                    "C:/Imperial/FYP-ESP-Test/.pio/libdeps/esp32dev/ESP32DMASPI",
+                    "C:/Imperial/FYP-Knitted-EMG/ESP32/.pio/libdeps/esp32dev/CircularBuffer",
+                    "C:/Imperial/FYP-Knitted-EMG/ESP32/.pio/libdeps/esp32dev/ESP32DMASPI",
                     "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32s3/include/newlib/platform_include",
                     "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32s3/include/freertos/include",
                     "C:/Users/abbyf/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32s3/include/freertos/include/esp_additions/freertos",

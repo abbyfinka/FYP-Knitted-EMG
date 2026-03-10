@@ -6,6 +6,7 @@
 #include "ADS119X.h"
 #include <BLE2902.h>
 #include "CircularBuffer.hpp"
+#include "main.h"
 
 // UUIDs for BLE service and characteristic
 #define SERVICE_UUID        "cde33313-b7aa-4b32-b29f-9043b1d8e042"
@@ -20,7 +21,7 @@ TaskHandle_t Task1;
 TaskHandle_t Task2; 
 TaskHandle_t Task3; 
 
-CircularBuffer<std::string, 100> bleDataBuffer; // Buffer to hold data to be sent over BLE
+CircularBuffer<EMGData, 100> bleDataBuffer; // Buffer to hold data to be sent over BLE
 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -72,8 +73,8 @@ void handleTransmitTask(void * pvParameters) {
     if (!bleDataBuffer.isEmpty() && deviceConnected) {
 
       // Serial.println("Data found in buffer, sending over BLE...");  
-      std::string dataToSend = bleDataBuffer.pop(); // Get the next data string from the buffer
-      pCharacteristic->setValue(dataToSend.c_str()); // Set the characteristic value
+      EMGData dataToSend = bleDataBuffer.pop(); // Get the next data string from the buffer
+      pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(EMGData)); // Set the characteristic value
       pCharacteristic->notify(); // Notify connected clients
       
     }
@@ -88,11 +89,9 @@ void readADSTask(void * pvParameters) {
 
     if (!prev_dataReady && dataReady) {
       
-      std::string channelData = ADS.getAllChannelData(); // Get all channel data as a string
-      // Serial.println(channelData.c_str()); // Print the channel data to the serial monitor
-      bleDataBuffer.push(channelData.c_str()); // Get all channel data as a string and push to buffer
+      EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
+      bleDataBuffer.push(channelData); // Get all channel data as a string and push to buffer
       
-
     }
     prev_dataReady = dataReady;
     vTaskDelay(pdMS_TO_TICKS(1)); // Check for new data every 1 ms
@@ -102,7 +101,7 @@ void readADSTask(void * pvParameters) {
 
 void setup() {
 
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println();
   Serial.println("ADS1198 has started!");
 
@@ -129,9 +128,6 @@ void setup() {
   BLEDevice::startAdvertising();
   Serial.println("Characteristic defined.");
 
-  xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 1, &Task1, 0);
-  xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 1, &Task2, 0);
-
   // set device pins high to keep devices active (tie high in final design)
   pinMode(PWDN, OUTPUT);
   pinMode(START, OUTPUT);
@@ -149,6 +145,8 @@ void setup() {
   ADS.enableRLD();
   ADS.startContinuousConversion();
 
+  xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 1, &Task1, 0);
+  xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 1, &Task2, 0);
   xTaskCreatePinnedToCore(readADSTask, "ReadADS", 10000, NULL, 1, &Task3, 1);
 
 }

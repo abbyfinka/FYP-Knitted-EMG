@@ -1,6 +1,7 @@
 #include "ADS119X.h"
 #include "Arduino.h"
 #include "SPI.h"
+#include "main.h"
 
 ADS119X::ADS119X(byte dataReady_Pin, byte reset_Pin, byte cs_Pin)
 {
@@ -381,21 +382,18 @@ void ADS119X::enableRLD() {
   startContinuousConversion(); 
 }
 
-std::string ADS119X::getAllChannelData() {
+EMGData ADS119X::getAllChannelData() {
   
   readChannelData();
 
-  std::string stringOutput = "";
-  
+  EMGData output;
+  output.timestamp = millis();
   for (int ch = 0; ch < getNumberOfChannels() ; ch++)
   {
-    stringOutput += std::to_string(getChannelData(ch) * ADS_SCALING * 1000); // print in uV
-    if (ch < getNumberOfChannels() - 1 ) {
-      stringOutput += ","; 
-    }
-    
+    output.channelData[ch] = getChannelData(ch) * ADS_SCALING * 1000; // print in mV
   }
+
   // Serial.println(stringOutput);
-  return stringOutput;
+  return output; // return timestamp for now, can modify to return all channel data as needed
 }
 

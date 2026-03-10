@@ -4,6 +4,7 @@
 #include "Arduino.h"
 #include "SPI.h"
 #include <vector>
+#include "main.h"
 
 #define ADS119X_TOTAL_CH   8   
 #define ADS119X_BYTES_PER_CH   2   
@@ -224,7 +225,7 @@ class ADS119X {
 
   void enableRLD();
 
-  std::string getAllChannelData();
+  EMGData getAllChannelData();
   
   
  private:

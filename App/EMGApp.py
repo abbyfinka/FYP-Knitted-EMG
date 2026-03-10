@@ -4,12 +4,15 @@ Based on similar application: https://github.com/LilOz/emg-realtime-classificati
 BLE interface based on: https://github.com/HamzaYslmn/ESP32_BT_Windows_Python/tree/main 
 '''
 import asyncio
+from datetime import datetime
 import threading
 from bleak import BleakClient, BleakScanner
 from collections import deque
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.animation import FuncAnimation
+from pathlib import Path
+import struct
 
 # ======= Global parameters =======
 
@@ -22,7 +25,14 @@ fs = 1000
 data_buffer_len = fs * 3
 time_step = 1 / fs
 
-logging = 0 # Set to 1 to enable logging to text file, 0 to disable
+logging = True # Set to 1 to enable logging to text file, 0 to disable
+
+if (logging):
+    log_dir = Path("Logs")
+    log_file_path = log_dir / (str(datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + "_emg_log.txt")
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = open(log_file_path, "w")
+    print(f"Logging enabled, writing to {log_file_path}")
 
 # ======= Recieving BLE =======
 
@@ -33,13 +43,21 @@ async def process_data(queue):
         
         # processing data
         try: 
-            raw_data = data.decode('utf-8').strip()
-            split_data = raw_data.split(',')
+            format_string = '<I8h'
+            unpacked_data = struct.unpack(format_string, data)
+    
+            timestamp = unpacked_data[0]
+            channels = unpacked_data[1:]
+
+            if (logging):
+                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
+
             #print(split_data)
             for n in range(0,7):
                 # append new values
-                channel_data[n].append(float(split_data[n]) * -1)
-                # print(f"Channel {n+1}: {split_data[n]}")
+                channel_data[n].append(float(channels[n]) * -1)
+                # print(f"Channel {n+1}: {channels[n]}")
+                
         except Exception as e:
             print("Error decoding data " + str(e))
 
