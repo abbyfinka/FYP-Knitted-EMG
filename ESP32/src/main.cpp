@@ -17,9 +17,9 @@ BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
-TaskHandle_t Task1;  
-TaskHandle_t Task2; 
-TaskHandle_t Task3; 
+TaskHandle_t Task1;  // handle BLE connections
+TaskHandle_t Task2;  // handle BLE data transmission
+TaskHandle_t Task3 = NULL;  // handle reading data from ADS1198
 
 CircularBuffer<EMGData, 100> bleDataBuffer; // Buffer to hold data to be sent over BLE
 
@@ -43,8 +43,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
 #define START   8      // start pin
 #define SDN     18     // shutdown pin
 
-bool dataReady = 0;
-bool prev_dataReady = 0;
+volatile bool dataReady = false; // Flag to indicate data ready from ADS1198
 
 // Initialise ADS119X
 ADS119X ADS(DRDY, RST, CS);
@@ -85,19 +84,24 @@ void handleTransmitTask(void * pvParameters) {
 
 void readADSTask(void * pvParameters) {
   while (true) {
-    dataReady = ADS.isDRDY();
-
-    if (!prev_dataReady && dataReady) {
+    // Serial.println(dataReady);
+    // Serial.println(dataReadyCount);
+    if (dataReady) {
       
+      // Serial.println("Data ready from ADS1198, reading channel data...");
+      dataReady = false; // Reset data ready flag
       EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
       bleDataBuffer.push(channelData); // Get all channel data as a string and push to buffer
       
     }
-    prev_dataReady = dataReady;
-    vTaskDelay(pdMS_TO_TICKS(1)); // Check for new data every 1 ms
   }
 }
 
+void IRAM_ATTR DRDY_ISR() {
+
+  dataReady = true;
+
+}
 
 void setup() {
 
@@ -144,6 +148,8 @@ void setup() {
   ADS.setDataRate(ADS119X_DRATE_1000SPS);
   ADS.enableRLD();
   ADS.startContinuousConversion();
+
+  attachInterrupt(DRDY, DRDY_ISR, FALLING); // Attach interrupt to DRDY pin
 
   xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 1, &Task1, 0);
   xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 1, &Task2, 0);

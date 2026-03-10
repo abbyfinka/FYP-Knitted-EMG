@@ -388,7 +388,7 @@ EMGData ADS119X::getAllChannelData() {
 
   EMGData output;
   output.timestamp = millis();
-  for (int ch = 0; ch < getNumberOfChannels() ; ch++)
+  for (int ch = 0; ch < getNumberOfChannels(); ch++)
   {
     output.channelData[ch] = getChannelData(ch) * ADS_SCALING * 1000; // print in mV
   }
