@@ -19,7 +19,7 @@ bool oldDeviceConnected = false;
 
 TaskHandle_t Task1;  // handle BLE connections
 TaskHandle_t Task2;  // handle BLE data transmission
-TaskHandle_t Task3 = NULL;  // handle reading data from ADS1198
+TaskHandle_t drdyTask = NULL;  // handle reading data from ADS1198
 
 CircularBuffer<EMGData, 100> bleDataBuffer; // Buffer to hold data to be sent over BLE
 
@@ -49,7 +49,7 @@ volatile bool dataReady = false; // Flag to indicate data ready from ADS1198
 ADS119X ADS(DRDY, RST, CS);
 
 void handleBLETask(void * pvParameters) {
-  while (true) {
+  for (;;) {
     // Disconnecting
     if (!deviceConnected && oldDeviceConnected) {
       delay(500); // Give the bluetooth stack the chance to get things ready
@@ -66,7 +66,7 @@ void handleBLETask(void * pvParameters) {
 }
 
 void handleTransmitTask(void * pvParameters) {
-  while (true) {
+  for (;;) {
 
     // Serial.println("Checking buffer for data to send...");
     if (!bleDataBuffer.isEmpty() && deviceConnected) {
@@ -83,23 +83,32 @@ void handleTransmitTask(void * pvParameters) {
 }
 
 void readADSTask(void * pvParameters) {
-  while (true) {
-    // Serial.println(dataReady);
-    // Serial.println(dataReadyCount);
-    if (dataReady) {
-      
-      // Serial.println("Data ready from ADS1198, reading channel data...");
-      dataReady = false; // Reset data ready flag
-      EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
-      bleDataBuffer.push(channelData); // Get all channel data as a string and push to buffer
-      
+  for (;;) {
+    
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Wait until notified by the DRDY ISR
+
+    if (!ADS.isDRDY()) {
+        // Serial.println("Data ready signal received, but DRDY pin is not low. Skipping data read.");
+        continue; // Skip to the next loop immediately
     }
+
+    EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
+    bleDataBuffer.push(channelData); // Get all channel data as a string and push to buffer
+    
   }
 }
 
 void IRAM_ATTR DRDY_ISR() {
 
-  dataReady = true;
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+  if (drdyTask != NULL) {
+    vTaskNotifyGiveFromISR(drdyTask, &xHigherPriorityTaskWoken); // Notify the task that data is ready
+  }
+
+  if (xHigherPriorityTaskWoken) {
+    portYIELD_FROM_ISR(); // Yield to the higher priority task immediately
+  }
 
 }
 
@@ -153,7 +162,7 @@ void setup() {
 
   xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 1, &Task1, 0);
   xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 1, &Task2, 0);
-  xTaskCreatePinnedToCore(readADSTask, "ReadADS", 10000, NULL, 1, &Task3, 1);
+  xTaskCreatePinnedToCore(readADSTask, "ReadADS", 10000, NULL, 1, &drdyTask, 1);
 
 }
 
