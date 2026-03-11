@@ -9,4 +9,6 @@ struct EMGData {
   int16_t channelData[8]; // Data for 8 channels
 };
 
+
+
 #endif // MAIN_H

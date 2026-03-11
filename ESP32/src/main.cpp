@@ -5,7 +5,7 @@
 #include <BLEServer.h>
 #include "ADS119X.h"
 #include <BLE2902.h>
-#include "CircularBuffer.hpp"
+#include "freertos/ringbuf.h"
 #include "main.h"
 
 // UUIDs for BLE service and characteristic
@@ -21,19 +21,7 @@ TaskHandle_t Task1;  // handle BLE connections
 TaskHandle_t Task2;  // handle BLE data transmission
 TaskHandle_t drdyTask = NULL;  // handle reading data from ADS1198
 
-CircularBuffer<EMGData, 100> bleDataBuffer; // Buffer to hold data to be sent over BLE
-
-class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-      deviceConnected = true;
-      Serial.println("Device has connected");
-    };
-
-    void onDisconnect(BLEServer* pServer) {
-      deviceConnected = false;
-      Serial.println("Device has disconnected");
-    }
-};
+RingbufHandle_t bleDataBuffer;
 
 // Pin definitions
 #define CS      10     // chip select pin
@@ -44,6 +32,20 @@ class MyServerCallbacks: public BLEServerCallbacks {
 #define SDN     18     // shutdown pin
 
 volatile bool dataReady = false; // Flag to indicate data ready from ADS1198
+
+class MyServerCallbacks: 
+
+public BLEServerCallbacks {
+    void onConnect(BLEServer* pServer) {
+      deviceConnected = true;
+      // Serial.println("Device has connected");
+    };
+
+    void onDisconnect(BLEServer* pServer) {
+      deviceConnected = false;
+      // Serial.println("Device has disconnected");
+    }
+};
 
 // Initialise ADS119X
 ADS119X ADS(DRDY, RST, CS);
@@ -69,16 +71,18 @@ void handleTransmitTask(void * pvParameters) {
   for (;;) {
 
     // Serial.println("Checking buffer for data to send...");
-    if (!bleDataBuffer.isEmpty() && deviceConnected) {
-
-      // Serial.println("Data found in buffer, sending over BLE...");  
-      EMGData dataToSend = bleDataBuffer.pop(); // Get the next data string from the buffer
+    // Serial.println("Data found in buffer, sending over BLE...");
+    size_t itemSize;
+    void *data = xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+    if (data != NULL) {
+      // Serial.println("Data found in buffer, sending over BLE...");
+      EMGData dataToSend = *(EMGData*)data; // Get the next data string from the buffer
       pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(EMGData)); // Set the characteristic value
       pCharacteristic->notify(); // Notify connected clients
-      
+      vRingbufferReturnItem(bleDataBuffer, data); // Return the item to the buffer after processing
     }
+    
     // Serial.println("No data to send.");
-    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
@@ -93,8 +97,11 @@ void readADSTask(void * pvParameters) {
     }
 
     EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
-    bleDataBuffer.push(channelData); // Get all channel data as a string and push to buffer
+    BaseType_t result = xRingbufferSend(bleDataBuffer, &channelData, sizeof(EMGData), 0); // Send data to buffer
     
+    if (result != pdTRUE) {
+      Serial.println("Failed to send data to buffer.");
+    }
   }
 }
 
@@ -115,8 +122,13 @@ void IRAM_ATTR DRDY_ISR() {
 void setup() {
 
   Serial.begin(115200);
-  Serial.println();
-  Serial.println("ADS1198 has started!");
+
+  bleDataBuffer = xRingbufferCreate(20 * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
+
+  if (bleDataBuffer == NULL) {
+    Serial.println("Failed to create ring buffer");
+    while (true); // Stop execution if buffer creation fails
+  }
 
   //BLE setup
   BLEDevice::init("EMG-Logger");
