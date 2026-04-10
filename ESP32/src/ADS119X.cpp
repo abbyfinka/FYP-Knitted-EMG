@@ -67,7 +67,6 @@ void ADS119X::startContinuousConversion() {
   delay(10);
 }
 
-
 void ADS119X::sendCommand(byte _command) 
 {
   csLow();    
@@ -375,8 +374,8 @@ void ADS119X::enableRLD() {
   
   sendCommand (ADS119X_CMD_SDATAC);
   
-  WREG(ADS119X_RLDSENSEP, 0x01); 
-  WREG(ADS119X_RLDSENSEN, 0x01); 
+  WREG(ADS119X_RLDSENSEP, 0x04); 
+  WREG(ADS119X_RLDSENSEN, 0x04); 
   WREG(ADS119X_ADD_CONFIG3 , ADS119X_ENABLE_RLD);
   
   startContinuousConversion(); 

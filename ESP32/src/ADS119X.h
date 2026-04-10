@@ -64,7 +64,7 @@
 
 #define  ADS119X_RLDSENSEP   0x0D
 #define  ADS119X_RLDSENSEN   0x0E
-#define  ADS119X_ENABLE_RLD  0xDC
+#define  ADS119X_ENABLE_RLD  0xCC
 
 //-------- Device Settings ID Constant Values (Read Only)
 #define ADS119X_ID_7_2           0xB4    // 101x xxxx is ADS119X device family, xxx1 01xx this part is constant read only

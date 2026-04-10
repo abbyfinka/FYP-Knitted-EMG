@@ -24,8 +24,10 @@ PRINT_INTERVAL = 0.512
 fs = 1000
 data_buffer_len = fs * 3
 time_step = 1 / fs
+ylim = 1500
 
 logging = True # Set to 1 to enable logging to text file, 0 to disable
+connect = True
 
 if (logging):
     log_dir = Path("Logs")
@@ -55,9 +57,9 @@ async def process_data(queue):
             #print(split_data)
             for n in range(0,7):
                 # append new values
-                channel_data[n].append(float(channels[n]) * -1)
+                channel_data[n].append(float(channels[n]))
                 # print(f"Channel {n+1}: {channels[n]}")
-                
+
         except Exception as e:
             print("Error decoding data " + str(e))
 
@@ -98,13 +100,15 @@ async def ble_receive():
         
         print("Streaming data. Press Ctrl+C to stop.")
         try:
-            while True:
+            while connect == True:
                 await asyncio.sleep(1)
         except asyncio.CancelledError:
             pass
         finally:
             await client.stop_notify(CHARACTERISTIC_UUID)
             process_task.cancel()
+            client.disconnect()
+            print("Disconnected.")
 
 
 def run_ble_process():
@@ -132,7 +136,7 @@ for i in range(8):
     ax = fig.add_subplot(gs[i // 4, i % 4])
     line, = ax.plot([], [], label=f"Channel {i+1}", linewidth=0.5)
     lines.append(line)
-    ax.set_ylim(0, 600)
+    ax.set_ylim(-ylim, ylim)
     ax.set_xlim(0, data_buffer_len)
     ax.set_ylabel(f"Ch {i+1}")
     ax.set_title(f"Channel {i+1}")
@@ -153,6 +157,7 @@ def animate(frame):
 ani = FuncAnimation(fig, animate, interval=50, blit=True)
 plt.tight_layout()
 plt.show()
+
 
 
 
