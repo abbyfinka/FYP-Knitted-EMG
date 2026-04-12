@@ -57,7 +57,7 @@ async def process_data(queue):
 
             for n in range(0,7):
                 # append new values
-                channel_data[n].append(float(channels[n]))
+                channel_data[n].append(float(channels[n]) * (2.4 / 32767) * 1000)
                 # print(f"Channel {n+1}: {channels[n]}")
 
         except Exception as e:
