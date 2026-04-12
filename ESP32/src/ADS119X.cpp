@@ -221,9 +221,9 @@ void ADS119X::testNoise()
     delay (10);
     
     // Capture Data and Check Noise: Look fot DRDY and issue 24 + n x 16 SCLK
-    while (!isDRDY()) {
-    }
-    readChannelData();
+    // while (!isDRDY()) {
+    // }
+    // readChannelData();
     delay (10);  
 }
 
@@ -236,8 +236,8 @@ void ADS119X::testSignal()
     
     //    Set internal Test Signal, default is (1mV x Vref /2.4)  Square-Wave Test Signal On All Channels      
     //    WREG CONFIG2 0x10  (Set Test signal to internal)
-    byte valueToWrite = (_regData[ADS119X_ADD_CONFIG2] & ~ADS119X_INT_TEST_MASK) | 0x10 ;
-    WREG(ADS119X_ADD_CONFIG2 , valueToWrite);
+    WREG(ADS119X_ADD_CONFIG2 , 0x30);
+    WREG(ADS119X_ADD_CONFIG3, 0xC0);
     
     //    WREG CHnSET 0x05   (conect channel mux to test/internal/normal/temp signal)
     setAllChannelMux(ADS119X_CHnSET_MUX_TEST); 
@@ -247,9 +247,9 @@ void ADS119X::testSignal()
     delay (10);
     
     //    Capture Data and Test Signal: Look fot DRDY and issue 24 + n x 16 SCLK
-    while (!isDRDY()) {
-    }
-    readChannelData();
+    // while (!isDRDY()) {
+    // }
+    //readChannelData();
     delay (10);
 }
 
@@ -389,10 +389,10 @@ EMGData ADS119X::getAllChannelData() {
   output.timestamp = millis();
   for (int ch = 0; ch < getNumberOfChannels(); ch++)
   {
-    output.channelData[ch] = getChannelData(ch) * ADS_SCALING * 1000; // print in mV
+    output.channelData[ch] = getChannelData(ch); // print in uV
   }
 
   // Serial.println(stringOutput);
-  return output; // return timestamp for now, can modify to return all channel data as needed
+  return output;
 }
 

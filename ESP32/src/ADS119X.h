@@ -172,7 +172,7 @@
 #define ADS119X_NOT_PD_LOFF_COMP_MASK       0x08
 
 // Scaling ADS119X output to voltage (Vref = 2.4V and 16-bit resolution)
-#define ADS_SCALING 2.4 / (32768 - 1) 
+#define ADS_SCALING 2.4 / 32767
 
 //-------- WCT1
 

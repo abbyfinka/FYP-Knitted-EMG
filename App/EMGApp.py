@@ -24,11 +24,12 @@ PRINT_INTERVAL = 0.512
 fs = 1000
 data_buffer_len = fs * 3
 time_step = 1 / fs
-ylim = 1500
+ylim = 50
 
 logging = True # Set to 1 to enable logging to text file, 0 to disable
 connect = True
 
+# Create log file if logging enabled
 if (logging):
     log_dir = Path("Logs")
     log_file_path = log_dir / (str(datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + "_emg_log.txt")
@@ -41,20 +42,19 @@ if (logging):
 async def process_data(queue):
     while True:
         # print('processing data...')
-        data = await queue.get()
+        data = await queue.get() # get data from queue when available
         
         # processing data
         try: 
             format_string = '<I8h'
             unpacked_data = struct.unpack(format_string, data)
     
-            timestamp = unpacked_data[0]
-            channels = unpacked_data[1:]
+            timestamp = unpacked_data[0] # timestamp from ESP32 (millis)
+            channels = unpacked_data[1:] # channel data (8 channels, 16-bit signed integers)
 
             if (logging):
                 log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
 
-            #print(split_data)
             for n in range(0,7):
                 # append new values
                 channel_data[n].append(float(channels[n]))

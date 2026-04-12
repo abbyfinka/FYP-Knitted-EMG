@@ -1,0 +1,15 @@
+%% load EMG data
+
+clear; clc; 
+load("dataset1.mat");
+
+%% plot data
+
+figure(1);
+plot(channel_data(:,3), esp_timestamp / 1000);
+
+
+%% offline filtering
+
+
+

@@ -12,6 +12,8 @@
 #define SERVICE_UUID        "cde33313-b7aa-4b32-b29f-9043b1d8e042"
 #define CHARACTERISTIC_UUID "89fea506-0482-4895-b474-843229dae557"
 
+bool sendTestData = false; // Flag to control sending test data instead of real ADS119X data
+
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
@@ -105,18 +107,26 @@ void handleBLETask(void * pvParameters) {
 
 void handleTransmitTask(void * pvParameters) {
   for (;;) {
-
+ 
     // Serial.println("Checking buffer for data to send...");
     // Serial.println("Data found in buffer, sending over BLE...");
     size_t itemSize;
-    void *data = xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+    EMGData* data = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
     if (data != NULL) {
+
       // Serial.println("Data found in buffer, sending over BLE...");
-      EMGData dataToSend = *(EMGData*)data; // Get the next data string from the buffer
+      //EMGData dataToSend = *(EMGData*)data1; // Get the next data string from the buffer
+
+      EMGData dataToSend = *data; // Get the next data string from the buffer
+
       pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(EMGData)); // Set the characteristic value
       if (deviceConnected) { pCharacteristic->notify(); } // Notify connected clients
-      vRingbufferReturnItem(bleDataBuffer, data); // Return the item to the buffer after processing
+      vRingbufferReturnItem(bleDataBuffer, (void*)data); // Return the item to the buffer after processing
+      
+      
     }
+    
+
     //Serial.println(digitalRead(LOD_PLUS));
     //Serial.println(digitalRead(LOD_NEG));
     // Serial.println("No data to send.");
@@ -135,7 +145,8 @@ void readADSTask(void * pvParameters) {
 
     EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
     BaseType_t result = xRingbufferSend(bleDataBuffer, &channelData, sizeof(EMGData), 0); // Send data to buffer
-    
+    // Serial.println(channelData.channelData[0]);
+
     if (result != pdTRUE) {
       Serial.println("Failed to send data to buffer.");
     }
@@ -160,6 +171,8 @@ void setup() {
 
   Serial.begin(115200);
 
+  Serial.println("Starting Setup...");
+
   bleDataBuffer = xRingbufferCreate(20 * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
 
   if (bleDataBuffer == NULL) {
@@ -167,6 +180,7 @@ void setup() {
     while (true); // Stop execution if buffer creation fails
   }
 
+  Serial.println("Starting BLE setup...");
   //BLE setup
   BLEDevice::init("EMG-Logger");
   pServer = BLEDevice::createServer();  
@@ -188,7 +202,7 @@ void setup() {
   pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
-  Serial.println("Characteristic defined.");
+  Serial.println("Started BLE advertising...");
 
   // set device pins high to keep devices active (tie high in final design)
   pinMode(PWDN_, OUTPUT);
@@ -202,11 +216,9 @@ void setup() {
   pinMode(LOD_PLUS, INPUT);
   pinMode(LOD_NEG, INPUT);
 
-  // turn on LED
+  // LED on Test Board
   pinMode(LED_PIN, OUTPUT);
-  // digitalWrite(LED_PIN, HIGH);
-  // delay(500);
-  // digitalWrite(LED_PIN, LOW);
+  digitalWrite(LED_PIN, LOW); // Turn off LED initially
   
   // setup
   delay(100); // Short delay to ensure pins are set before initializing ADS
@@ -214,14 +226,19 @@ void setup() {
   Serial.println();
   delay(100); // Short delay to ensure ADS is ready before configuration
 
+  Serial.println(ADS.getStatus(), BIN);
+
   // send ADS setup commands
   ADS.sendCommand(ADS119X_CMD_SDATAC); // pause data conversion to send config commands
-  delay(10);
-  ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_8); // setting gain to 8 for all channels
-  ADS.setAllChannelMux(ADS119X_CHnSET_MUX_NORMAL); 
   ADS.setDataRate(ADS119X_DRATE_1000SPS);
-  ADS.enableRLD();
+  if (!sendTestData) {
+    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_8); // setting gain to 8 for all channels
+    ADS.setAllChannelMux(ADS119X_CHnSET_MUX_NORMAL); 
+    ADS.enableRLD();
+  }
+  delay(10);
   ADS.startContinuousConversion(); // start reading data continuously
+
 
   attachInterrupt(DRDY_, DRDY__ISR, FALLING); // Attach interrupt to DRDY_ pin
 
