@@ -25,6 +25,7 @@ fs = 500
 data_buffer_len = fs * 10
 time_step = 1 / fs
 ylim = 500
+sample_index = 1
 
 logging = True # Set to 1 to enable logging to text file, 0 to disable
 connect = True
@@ -35,6 +36,9 @@ if (logging):
     log_file_path = log_dir / (str(datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + "_emg_log.txt")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = open(log_file_path, "w")
+    log_file.write("%Raw EMG data\n %Sample Rate = " + str(fs) + "Hz\n")
+    # headers matching Cyton board format for compatibility with existing processing pipelines, even though not all channels are used
+    log_file.write("Sample Index, EXG Channel 0, EXG Channel 1, EXG Channel 2, EXG Channel 3, EXG Channel 4, EXG Channel 5, EXG Channel 6, EXG Channel 7, Accel Channel 0, Accel Channel 1, Accel Channel 2, Not Used, Digital Channel 0 (D11), Digital Channel 1 (D12), Digital Channel 2 (D13), Digital Channel 3 (D17), Not Used, Digital Channel 4 (D18), Analog Channel 0, Analog Channel 1, Analog Channel 2, Timestamp, Marker Channel, Timestamp (Formatted)\n")
     print(f"Logging enabled, writing to {log_file_path}")
 
 # ======= Recieving BLE =======
@@ -55,8 +59,11 @@ async def process_data(queue):
             channels2 = unpacked_data[10:17]
 
             if (logging):
-                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp1) + ": " + str(channels1) + "\n")
-                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp2) + ": " + str(channels2) + "\n")
+                log_file.write(str(sample_index) + ", ".join(str(c) for c in channels1) + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
+                log_file.write(str(sample_index + 1) + ", ".join(str(c) for c in channels2) + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
+                sample_index += 2
+                # log_file.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S") + ": " + str(timestamp1) + ": " + str(channels1) + "\n")
+                # log_file.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S") + ": " + str(timestamp2) + ": " + str(channels2) + "\n")
                 
             for n in range(0,7):
                 # append new values
