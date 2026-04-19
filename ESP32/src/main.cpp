@@ -26,15 +26,15 @@ TaskHandle_t handleReadADS = NULL;  // handle reading data from ADS1198
 RingbufHandle_t bleDataBuffer;
 
 // Pin definitions
-#define CS_        10     // chip select pin
-#define DRDY_     9      // data ready pin
-#define RESET_       46     // reset pin
-#define PWDN_      3      // power down pin
-#define START     8      // start pin
-#define SDN_      18     // shutdown pin
-#define LOD_PLUS  16
-#define LOD_NEG   17
-#define LED_PIN   15      // LED pin for debugging
+#define CS_           10     // chip select pin
+#define DRDY_         9      // data ready pin
+#define RESET_        46     // reset pin
+#define PWDN_         3      // power down pin
+#define START         8      // start pin
+#define SDN_          18     // shutdown pin
+#define LOD_PLUS      16
+#define LOD_NEG       17
+#define LED_PIN       15      // LED pin for debugging
 
 // PIN DEFINITIONS - MATCHES PCB DESIGN
 
@@ -84,8 +84,6 @@ void handleBLETask(void * pvParameters) {
 
       // pause EMG reading while no device connected
       digitalWrite(PWDN_, 0); // change to also turn off clock if concerned about power saving
-      vTaskSuspend(handleTransmit);
-      vTaskSuspend(handleReadADS);
       digitalWrite(LED_PIN, LOW); // Turn on LED to indicate connection
       
     }
@@ -96,8 +94,6 @@ void handleBLETask(void * pvParameters) {
       // resume EMG reading
       digitalWrite(PWDN_, 1);
       delay(10);
-      vTaskResume(handleTransmit);
-      vTaskResume(handleReadADS);
       digitalWrite(LED_PIN, HIGH); // Turn on LED to indicate connection
       
     }
@@ -111,19 +107,19 @@ void handleTransmitTask(void * pvParameters) {
     // Serial.println("Checking buffer for data to send...");
     // Serial.println("Data found in buffer, sending over BLE...");
     size_t itemSize;
-    EMGData* data = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-    if (data != NULL) {
+    EMGData* data1 = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+    if (data1 != NULL) {
 
-      // Serial.println("Data found in buffer, sending over BLE...");
-      //EMGData dataToSend = *(EMGData*)data1; // Get the next data string from the buffer
+      EMGData* data2 = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+  
+      // EMGData dataToSend = *data; // Get the next data string from the buffer
 
-      EMGData dataToSend = *data; // Get the next data string from the buffer
+      TransmitData dataToSend = {*data1, *data2}; 
 
-      pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(EMGData)); // Set the characteristic value
+      pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
       if (deviceConnected) { pCharacteristic->notify(); } // Notify connected clients
-      vRingbufferReturnItem(bleDataBuffer, (void*)data); // Return the item to the buffer after processing
-      
-      
+      vRingbufferReturnItem(bleDataBuffer, (void*)data1); // Return the item to the buffer after processing
+      vRingbufferReturnItem(bleDataBuffer, (void*)data2); // Return the item to the buffer after processing
     }
     
 
@@ -137,12 +133,13 @@ void readADSTask(void * pvParameters) {
   for (;;) {
     
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Wait until notified by the DRDY_ ISR
-
+    
     if (!ADS.isDRDY()) {
         // Serial.println("Data ready signal received, but DRDY_ pin is not low. Skipping data read.");
         continue; // Skip to the next loop immediately
     }
 
+    
     EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
     BaseType_t result = xRingbufferSend(bleDataBuffer, &channelData, sizeof(EMGData), 0); // Send data to buffer
     // Serial.println(channelData.channelData[0]);
@@ -155,6 +152,7 @@ void readADSTask(void * pvParameters) {
 
 void IRAM_ATTR DRDY__ISR() {
 
+  ADS.readChannelData(); // Read data from ADS119X to clear DRDY_ signal and prepare for next data ready event. This is necessary to avoid missing data ready events if the task is not scheduled immediately after the interrupt.
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
   if (handleReadADS != NULL) {
@@ -208,9 +206,9 @@ void setup() {
   pinMode(PWDN_, OUTPUT);
   pinMode(START, OUTPUT);
   pinMode(SDN_, OUTPUT);
-  digitalWrite(PWDN_, 1);
-  digitalWrite(START, 1);
-  digitalWrite(SDN_, 0); // TEMPORARILY SET LOW
+  digitalWrite(PWDN_, HIGH);
+  digitalWrite(START, HIGH);
+  digitalWrite(SDN_, HIGH);
 
   // lead off detection
   pinMode(LOD_PLUS, INPUT);

@@ -246,6 +246,7 @@ class ADS119X {
   byte _num_channels ;
   int16_t _channelData[ADS119X_TOTAL_CH];    
   uint32_t _boardStat;
+  uint32_t _lastreadtime;
 
   static constexpr size_t BUFFER_SIZE = 4;
   static constexpr size_t QUEUE_SIZE = 2;

@@ -19,12 +19,12 @@ import struct
 SERVICE_UUID = "cde33313-b7aa-4b32-b29f-9043b1d8e042"
 CHARACTERISTIC_UUID = "89fea506-0482-4895-b474-843229dae557"
 TARGET_DEVICE_NAME = "EMG-Logger"
-PRINT_INTERVAL = 0.512
+PRINT_INTERVAL = 0.512*2
 
-fs = 1000
-data_buffer_len = fs * 3
+fs = 500
+data_buffer_len = fs * 10
 time_step = 1 / fs
-ylim = 50
+ylim = 500
 
 logging = True # Set to 1 to enable logging to text file, 0 to disable
 connect = True
@@ -46,19 +46,23 @@ async def process_data(queue):
         
         # processing data
         try: 
-            format_string = '<I8h'
+            format_string = '<I8hI8h'
             unpacked_data = struct.unpack(format_string, data)
     
-            timestamp = unpacked_data[0] # timestamp from ESP32 (millis)
-            channels = unpacked_data[1:] # channel data (8 channels, 16-bit signed integers)
+            timestamp1 = unpacked_data[0] # timestamp from ESP32 (millis)
+            channels1 = unpacked_data[1:8] # channel data (8 channels, 16-bit signed integers)
+            timestamp2 = unpacked_data[9]
+            channels2 = unpacked_data[10:17]
 
             if (logging):
-                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
-
+                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp1) + ": " + str(channels1) + "\n")
+                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp2) + ": " + str(channels2) + "\n")
+                
             for n in range(0,7):
                 # append new values
-                channel_data[n].append(float(channels[n]) * (2.4 / 32767) * 1000)
-                # print(f"Channel {n+1}: {channels[n]}")
+                channel_data[n].append(float(channels1[n]) * (2.4 / 32767) * 1000) # ADC scaling
+                channel_data[n].append(float(channels2[n]) * (2.4 / 32767) * 1000) # ADC scaling
+        
 
         except Exception as e:
             print("Error decoding data " + str(e))
@@ -126,29 +130,28 @@ threading.Thread(target=run_ble_process, daemon=True).start()
 # ======= Plotting =======
 
 fig = plt.figure(figsize=(12, 10))
-gs = GridSpec(2, 4, figure=fig)
+gs = GridSpec(8, 2, figure=fig, width_ratios=[2, 1])
 
 emg_axes = []
 lines = []
 
 print("Setting up plots...")
 for i in range(8):
-    ax = fig.add_subplot(gs[i // 4, i % 4])
+    ax = fig.add_subplot(gs[i, 0])
     line, = ax.plot([], [], label=f"Channel {i+1}", linewidth=0.5)
     lines.append(line)
     ax.set_ylim(-ylim, ylim)
-    ax.set_xlim(0, data_buffer_len)
+    ax.set_xlim(0, data_buffer_len * time_step)
     ax.set_ylabel(f"Ch {i+1}")
-    ax.set_title(f"Channel {i+1}")
     emg_axes.append(ax)
 
-emg_axes[-1].set_xlabel("Samples")
+emg_axes[-1].set_xlabel("Time / s")
 plt.tight_layout()
 
 def animate(frame):
     for idx, line in enumerate(lines):
         y = list(channel_data[idx])
-        x = list(range(len(y)))
+        x = list([s * time_step for s in range(len(y))])
         line.set_data(x, y)
 
     # Return all three line objects so FuncAnimation knows what to redraw

@@ -150,6 +150,7 @@ void ADS119X::readChannelData()
     }
   }
   csHigh(); // close SPI
+  _lastreadtime = millis();
   // No need to convert 16bit to 32bit or anything as channelData is 16 bit int (represented with signed 2'c binary)
 }
 
@@ -383,14 +384,13 @@ void ADS119X::enableRLD() {
 
 EMGData ADS119X::getAllChannelData() {
   
-  readChannelData();
+  EMGData output = {_lastreadtime, *_channelData};
+  Serial.println(_lastreadtime);
 
-  EMGData output;
-  output.timestamp = millis();
-  for (int ch = 0; ch < getNumberOfChannels(); ch++)
-  {
-    output.channelData[ch] = getChannelData(ch); // print in uV
-  }
+  // for (int ch = 0; ch < getNumberOfChannels(); ch++)
+  // {
+  //   output.channelData[ch] = getChannelData(ch); // print in uV
+  // }
 
   // Serial.println(stringOutput);
   return output;
