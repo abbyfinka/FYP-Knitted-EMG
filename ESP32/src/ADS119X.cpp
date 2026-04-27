@@ -19,7 +19,7 @@ ADS119X::ADS119X(byte dataReady_Pin, byte reset_Pin, byte cs_Pin)
   
   // Start SPI
   SPI.begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS
-  SPI.beginTransaction( SPISettings(100000, MSBFIRST, SPI_MODE1));
+  SPI.beginTransaction( SPISettings(200000, MSBFIRST, SPI_MODE1));
   
 }
 
@@ -131,27 +131,17 @@ void ADS119X::setDataRate(byte dataRate)
 
 void ADS119X::readChannelData()
 {
-  byte inByte;
-
-  //Read  status 24 bits
+  _lastreadtime = micros();
+  //Serial.println(_lastreadtime);
+  // Read status 24 bits
   csLow(); //  open SPI
-  for (int i = 0; i < 3; i++)
-  {
-    inByte = xfer(0x00); //  read 24 bit status register (1100 + LOFF_STATP + LOFF_STATN + GPIO[7:4])
-    //Serial.println(inByte, BIN);
-    _boardStat = (_boardStat << 8) | inByte;
-  }
-  for (int i = 0; i < ADS119X_TOTAL_CH; i++) 
-  {    // Read all channels
-    for (int j = 0; j < ADS119X_BYTES_PER_CH; j++)
-    { //  read 16 bits of channel data in 2 byte chunks
-      inByte = xfer(0x00);
-      _channelData[i] = (_channelData[i] << 8) | inByte; // int data goes here
-    }
-  }
+  SPI.transferBytes(NULL, _statusReg, 3); // read 24 bit status register (1100 + LOFF_STATP + LOFF_STATN + GPIO[7:4])
+  SPI.transferBytes(NULL, _channelData, 16); // read all channel data
   csHigh(); // close SPI
-  _lastreadtime = millis();
-  // No need to convert 16bit to 32bit or anything as channelData is 16 bit int (represented with signed 2'c binary)
+  
+  lastOutput.timestamp = _lastreadtime;
+  memcpy(lastOutput.channelData, _channelData, 16);
+ 
 }
 
 
@@ -382,10 +372,9 @@ void ADS119X::enableRLD() {
   startContinuousConversion(); 
 }
 
-EMGData ADS119X::getAllChannelData() {
+dataPacket* ADS119X::getAllChannelData() {
   
-  EMGData output = {_lastreadtime, *_channelData};
-  Serial.println(_lastreadtime);
+  // Serial.println(_lastreadtime);
 
   // for (int ch = 0; ch < getNumberOfChannels(); ch++)
   // {
@@ -393,6 +382,6 @@ EMGData ADS119X::getAllChannelData() {
   // }
 
   // Serial.println(stringOutput);
-  return output;
+  return &lastOutput;
 }
 
