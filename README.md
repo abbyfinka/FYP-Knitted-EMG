@@ -1,4 +1,4 @@
-# Firmware for Flexible Readout for Knitted sEMG Electrodes
+# Firmware for Flexible Readout of Knitted sEMG Electrodes
 
 Final Year Project - MEng Electrical and Electronic Engineering - Imperial College London
 
