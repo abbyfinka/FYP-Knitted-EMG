@@ -4,7 +4,6 @@
 #include "Arduino.h"
 #include "SPI.h"
 #include <vector>
-#include "main.h"
 
 #define ADS119X_TOTAL_CH   8   
 #define ADS119X_BYTES_PER_CH   2   
@@ -64,7 +63,7 @@
 
 #define  ADS119X_RLDSENSEP   0x0D
 #define  ADS119X_RLDSENSEN   0x0E
-#define  ADS119X_ENABLE_RLD  0xDC
+#define  ADS119X_ENABLE_RLD  0xCC
 
 //-------- Device Settings ID Constant Values (Read Only)
 #define ADS119X_ID_7_2           0xB4    // 101x xxxx is ADS119X device family, xxx1 01xx this part is constant read only
@@ -172,13 +171,17 @@
 #define ADS119X_NOT_PD_LOFF_COMP_MASK       0x08
 
 // Scaling ADS119X output to voltage (Vref = 2.4V and 16-bit resolution)
-#define ADS_SCALING 2.4 / (32768 - 1) 
+#define ADS_SCALING 2.4 / 32767
 
 //-------- WCT1
 
 //-------- WCT2
 
+struct dataPacket {
+  uint32_t timestamp; // Timestamp in milliseconds
+  uint8_t channelData[16]; // Data for 8 channels
 
+};
 
 
 
@@ -210,6 +213,7 @@ class ADS119X {
 
   int32_t getStatus();
   int16_t getChannelData(byte channel);  
+  float getGain();
 
   byte getRegisterSize(); 
   byte getRegister(byte address); 
@@ -225,9 +229,10 @@ class ADS119X {
 
   void enableRLD();
 
-  EMGData getAllChannelData();
-  
-  
+
+
+  dataPacket* getAllChannelData();
+
  private:
   byte xfer(byte _data); 
   void csLow();
@@ -243,15 +248,15 @@ class ADS119X {
   //-------- Lib Copy of Regs and Settings 
   byte _regData[ADS119X_REG_SIZE] ; 
   byte _regDataDefault[ADS119X_REG_SIZE] ; 
-  byte _num_channels ;
-  int16_t _channelData[ADS119X_TOTAL_CH];    
+  byte _num_channels ;   
   uint32_t _boardStat;
+  uint32_t _lastreadtime;
+  uint8_t _statusReg[3];
+  uint8_t _channelData[16];
 
-  static constexpr size_t BUFFER_SIZE = 4;
-  static constexpr size_t QUEUE_SIZE = 2;
-  uint8_t *dma_tx_buf;
-  uint8_t *dma_rx_buf;
-  
+  float gain;
+
+  dataPacket lastOutput;
   
 };
 

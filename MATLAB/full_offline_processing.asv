@@ -1,0 +1,21 @@
+%% load EMG data
+
+clear; clc; 
+load("dataset1.mat");
+
+%% plot data
+
+figure(1);
+plot(esp_timestamp ./ 1000, channel_data(:,3));
+
+
+%% offline filtering
+
+Wo = 50/(sampling_rate/2);  BW = Wo/35;
+[b,a] = designNotchPeakIIR("FilterOrder", 2, "CenterFrequency", 50, )
+
+for i = 1:num_channels
+    x_bandpass = bandpass(x,[100 200],fs);
+    x_notch = filter(b, a, x_bandpass);
+end
+

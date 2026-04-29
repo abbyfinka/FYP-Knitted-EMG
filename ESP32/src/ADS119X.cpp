@@ -19,7 +19,7 @@ ADS119X::ADS119X(byte dataReady_Pin, byte reset_Pin, byte cs_Pin)
   
   // Start SPI
   SPI.begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS
-  SPI.beginTransaction( SPISettings(100000, MSBFIRST, SPI_MODE1));
+  SPI.beginTransaction( SPISettings(200000, MSBFIRST, SPI_MODE1));
   
 }
 
@@ -66,7 +66,6 @@ void ADS119X::startContinuousConversion() {
   sendCommand (ADS119X_CMD_RDATAC);
   delay(10);
 }
-
 
 void ADS119X::sendCommand(byte _command) 
 {
@@ -132,26 +131,17 @@ void ADS119X::setDataRate(byte dataRate)
 
 void ADS119X::readChannelData()
 {
-  byte inByte;
-
-  //Read  status 24 bits
+  _lastreadtime = micros();
+  //Serial.println(_lastreadtime);
+  // Read status 24 bits
   csLow(); //  open SPI
-  for (int i = 0; i < 3; i++)
-  {
-    inByte = xfer(0x00); //  read 24 bit status register (1100 + LOFF_STATP + LOFF_STATN + GPIO[7:4])
-    //Serial.println(inByte, BIN);
-    _boardStat = (_boardStat << 8) | inByte;
-  }
-  for (int i = 0; i < ADS119X_TOTAL_CH; i++) 
-  {    // Read all channels
-    for (int j = 0; j < ADS119X_BYTES_PER_CH; j++)
-    { //  read 16 bits of channel data in 2 byte chunks
-      inByte = xfer(0x00);
-      _channelData[i] = (_channelData[i] << 8) | inByte; // int data goes here
-    }
-  }
+  SPI.transferBytes(NULL, _statusReg, 3); // read 24 bit status register (1100 + LOFF_STATP + LOFF_STATN + GPIO[7:4])
+  SPI.transferBytes(NULL, _channelData, 16); // read all channel data
   csHigh(); // close SPI
-  // No need to convert 16bit to 32bit or anything as channelData is 16 bit int (represented with signed 2'c binary)
+  
+  lastOutput.timestamp = _lastreadtime;
+  memcpy(lastOutput.channelData, _channelData, 16);
+ 
 }
 
 
@@ -184,12 +174,44 @@ void ADS119X::setAllChannelMux(byte muxSetting )
    
 }
 
+#define ADS119X_CHnSET_GAIN_6         0x00
+#define ADS119X_CHnSET_GAIN_1         0x10
+#define ADS119X_CHnSET_GAIN_2         0x20
+#define ADS119X_CHnSET_GAIN_3         0x30
+#define ADS119X_CHnSET_GAIN_4         0x40
+#define ADS119X_CHnSET_GAIN_8         0x50
+#define ADS119X_CHnSET_GAIN_12        0x60
+
 
 void ADS119X::setAllChannelGain(byte gainSetting )
 {
  for (byte address = ADS119X_ADD_CH1SET; address < ADS119X_ADD_CH1SET +  _num_channels ; address++) {
    setChannelSettings(address, keepSetting(address) , gainSetting, keepSetting(address) ) ;
  } 
+
+ switch (gainSetting){
+  case ADS119X_CHnSET_GAIN_6:
+    gain = 6.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_1:
+    gain = 1.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_2:
+    gain = 2.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_3:
+    gain = 3.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_4:
+    gain = 4.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_8:
+    gain = 8.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_12:
+    gain = 12.0f;
+    break;
+ }
    
 }
 
@@ -222,9 +244,9 @@ void ADS119X::testNoise()
     delay (10);
     
     // Capture Data and Check Noise: Look fot DRDY and issue 24 + n x 16 SCLK
-    while (!isDRDY()) {
-    }
-    readChannelData();
+    // while (!isDRDY()) {
+    // }
+    // readChannelData();
     delay (10);  
 }
 
@@ -237,8 +259,8 @@ void ADS119X::testSignal()
     
     //    Set internal Test Signal, default is (1mV x Vref /2.4)  Square-Wave Test Signal On All Channels      
     //    WREG CONFIG2 0x10  (Set Test signal to internal)
-    byte valueToWrite = (_regData[ADS119X_ADD_CONFIG2] & ~ADS119X_INT_TEST_MASK) | 0x10 ;
-    WREG(ADS119X_ADD_CONFIG2 , valueToWrite);
+    WREG(ADS119X_ADD_CONFIG2 , 0x30);
+    WREG(ADS119X_ADD_CONFIG3, 0xC0);
     
     //    WREG CHnSET 0x05   (conect channel mux to test/internal/normal/temp signal)
     setAllChannelMux(ADS119X_CHnSET_MUX_TEST); 
@@ -248,9 +270,9 @@ void ADS119X::testSignal()
     delay (10);
     
     //    Capture Data and Test Signal: Look fot DRDY and issue 24 + n x 16 SCLK
-    while (!isDRDY()) {
-    }
-    readChannelData();
+    // while (!isDRDY()) {
+    // }
+    //readChannelData();
     delay (10);
 }
 
@@ -375,25 +397,18 @@ void ADS119X::enableRLD() {
   
   sendCommand (ADS119X_CMD_SDATAC);
   
-  WREG(ADS119X_RLDSENSEP, 0x01); 
-  WREG(ADS119X_RLDSENSEN, 0x01); 
+  WREG(ADS119X_RLDSENSEP, 0x04); 
+  WREG(ADS119X_RLDSENSEN, 0x04); 
   WREG(ADS119X_ADD_CONFIG3 , ADS119X_ENABLE_RLD);
   
   startContinuousConversion(); 
 }
 
-EMGData ADS119X::getAllChannelData() {
-  
-  readChannelData();
+dataPacket* ADS119X::getAllChannelData() {
+  return &lastOutput;
+}
 
-  EMGData output;
-  output.timestamp = millis();
-  for (int ch = 0; ch < getNumberOfChannels() ; ch++)
-  {
-    output.channelData[ch] = getChannelData(ch) * ADS_SCALING * 1000; // print in mV
-  }
-
-  // Serial.println(stringOutput);
-  return output; // return timestamp for now, can modify to return all channel data as needed
+float ADS119X::getGain() {
+  return gain;
 }
 
