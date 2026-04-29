@@ -7,12 +7,16 @@
 #include <BLE2902.h>
 #include "freertos/ringbuf.h" // change to stream buffer?
 #include "main.h"
+#include "ADS119X.h"
+#include "Filters.h"
+#include <Filters/BiQuad.hpp>
+#include <Filters/Notch.hpp>
 
 // UUIDs for BLE service and characteristic
 #define SERVICE_UUID        "cde33313-b7aa-4b32-b29f-9043b1d8e042"
 #define CHARACTERISTIC_UUID "89fea506-0482-4895-b474-843229dae557"
 
-bool sendTestData = false; // Flag to control sending test data instead of real ADS119X data
+bool sendTestData = true; // Flag to control sending test data instead of real ADS119X data
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
@@ -22,39 +26,34 @@ bool oldDeviceConnected = false;
 TaskHandle_t handleBLE;  // handle BLE connections
 TaskHandle_t handleTransmit;  // handle BLE data transmission
 TaskHandle_t handleReadADS = NULL;  // handle reading data from ADS1198
+TaskHandle_t handleParseADS; // converting data to float and filtering
 
-RingbufHandle_t bleDataBuffer;
+RingbufHandle_t bleDataBufferRaw;
+RingbufHandle_t bleDataBuffer; 
+
+const double f_n = 2 * 50 / 1000;
+auto simple_notch_filter = simpleNotchFIR(f_n);
+
+// coefficients for 50 Hz filter, Q = 30 for sharp notch
+const float b0 = 0.99487611f;
+const float b1 = -1.89236681f;
+const float b2 = 0.99487611f;
+const float a0 = 1.0f; // normalised
+const float a1 = -1.89236681f;
+const float a2 = 0.98975221f;
+
+// initialising a filter for each channel
+BiQuadFilterDF1<float> biquad_notch_filter[8];
+bool enableNotchFilter = false; // Flag to control whether to apply the notch filter to the data
 
 // Pin definitions
-#define CS_        10     // chip select pin
-#define DRDY_     9      // data ready pin
-#define RESET_       46     // reset pin
-#define PWDN_      3      // power down pin
-#define START     8      // start pin
-#define SDN_      18     // shutdown pin
-#define LOD_PLUS  16
-#define LOD_NEG   17
-#define LED_PIN   15      // LED pin for debugging
-
-// PIN DEFINITIONS - MATCHES PCB DESIGN
-
-// #define LED_PIN   4      // LED pin for debugging
-// #define DRDY_     5      // data ready pin
-
-// // GND
-// // SCLK           12
-// // DIN (MOSI)     11
-// // DOUT (MISO)    13
-// #define CS_       10     // chip select pin
-
-// #define START     15     // start pin
-// #define RESET_    16     // reset pin
-// #define PWDN_     17     // power down pin
-// #define SDN_      18     // shutdown pin
-// #define LOD_PLUS  8
-// #define LOD_NEG   3
-
-volatile bool dataReady = false; // Flag to indicate data ready from ADS1198
+#define CS_           10     // chip select pin
+#define DRDY_         9      // data ready pin
+#define RESET_        46     // reset pin
+#define PWDN_         3      // power down pin
+#define START         8      // start pin
+#define SDN_          18     // shutdown pin
+#define LED_PIN       15     // LED pin for debugging
 
 class MyServerCallbacks: 
 
@@ -83,9 +82,7 @@ void handleBLETask(void * pvParameters) {
       oldDeviceConnected = deviceConnected;
 
       // pause EMG reading while no device connected
-      digitalWrite(PWDN_, 0); // change to also turn off clock if concerned about power saving
-      vTaskSuspend(handleTransmit);
-      vTaskSuspend(handleReadADS);
+      //digitalWrite(PWDN_, 0); // change to also turn off clock if concerned about power saving
       digitalWrite(LED_PIN, LOW); // Turn on LED to indicate connection
       
     }
@@ -94,10 +91,8 @@ void handleBLETask(void * pvParameters) {
       oldDeviceConnected = deviceConnected;
 
       // resume EMG reading
-      digitalWrite(PWDN_, 1);
-      delay(10);
-      vTaskResume(handleTransmit);
-      vTaskResume(handleReadADS);
+      //digitalWrite(PWDN_, 1);
+      //delay(10);
       digitalWrite(LED_PIN, HIGH); // Turn on LED to indicate connection
       
     }
@@ -105,31 +100,60 @@ void handleBLETask(void * pvParameters) {
   }
 }
 
-void handleTransmitTask(void * pvParameters) {
+void parseADSDataTask(void * pvParameters) {
   for (;;) {
- 
-    // Serial.println("Checking buffer for data to send...");
-    // Serial.println("Data found in buffer, sending over BLE...");
+    EMGData emg = {0};
     size_t itemSize;
-    EMGData* data = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-    if (data != NULL) {
+    dataPacket* data1 = (dataPacket*)xRingbufferReceive(bleDataBufferRaw, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+    float channelData1[8] = {0}; 
+    if (data1 != NULL) 
+    {
+      for (int i = 0; i < 8; i++) 
+      {
+        int index = i * 2;
+        
+        int16_t rawData = ((int16_t)(data1->channelData[index] << 8) | (int16_t)data1->channelData[index + 1]); // combining two 8 bit values from ADC into 16 bit value for each channel
+        float convertedData = rawData * (2.4f / 32767.0f) * 1000.0f / ADS.getGain(); // scaled ADC values to mV
+        
+        // real time filtering
 
-      // Serial.println("Data found in buffer, sending over BLE...");
-      //EMGData dataToSend = *(EMGData*)data1; // Get the next data string from the buffer
-
-      EMGData dataToSend = *data; // Get the next data string from the buffer
-
-      pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(EMGData)); // Set the characteristic value
-      if (deviceConnected) { pCharacteristic->notify(); } // Notify connected clients
-      vRingbufferReturnItem(bleDataBuffer, (void*)data); // Return the item to the buffer after processing
+        if (enableNotchFilter && !sendTestData) 
+        {
+          convertedData = biquad_notch_filter[i](convertedData); // applying notch filter
+        }
+        
+        channelData1[i] = convertedData;
+      }
       
-      
+      emg.timestamp = data1->timestamp;
+      memcpy(&emg.channelData, channelData1, sizeof(channelData1));
+      xRingbufferSend(bleDataBuffer, &emg, sizeof(EMGData), 0); // Send data to buffer
+      vRingbufferReturnItem(bleDataBufferRaw, (void*)data1); // Return the item to the buffer after processing
     }
-    
 
-    //Serial.println(digitalRead(LOD_PLUS));
-    //Serial.println(digitalRead(LOD_NEG));
-    // Serial.println("No data to send.");
+  }
+}
+
+void handleTransmitTask(void * pvParameters) 
+{
+  for (;;) 
+  {
+ 
+    TransmitData dataToSend = {0};
+    for (int i = 0; i < NUM_OF_PACKETS; i++) 
+    {
+      size_t itemSize;
+      EMGData* data = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+      if (data != NULL) 
+      {
+        memcpy(&dataToSend.dataToSend[i], data, sizeof(EMGData)); // Copy data to the TransmitData struct
+        vRingbufferReturnItem(bleDataBuffer, (void*)data); // Return the item to the buffer after processing
+      }
+    }
+
+    pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
+    if (deviceConnected) { pCharacteristic->notify(); } // Notify connected clients
+      
   }
 }
 
@@ -137,24 +161,23 @@ void readADSTask(void * pvParameters) {
   for (;;) {
     
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Wait until notified by the DRDY_ ISR
+    // pdTRUE clears missed notifications rather than accumulating in a queue
+    
+    // if (!ADS.isDRDY()) {
+    //     // Serial.println("Data ready signal received, but DRDY_ pin is not low. Skipping data read.");
+    //     continue; // Skip to the next loop immediately
+    // }
 
-    if (!ADS.isDRDY()) {
-        // Serial.println("Data ready signal received, but DRDY_ pin is not low. Skipping data read.");
-        continue; // Skip to the next loop immediately
-    }
+    ADS.readChannelData();
+    dataPacket* channelData = ADS.getAllChannelData(); // Get all channel data
+    xRingbufferSend(bleDataBufferRaw, channelData, sizeof(dataPacket), 0); // Send data to buffer
 
-    EMGData channelData = ADS.getAllChannelData(); // Get all channel data as a string
-    BaseType_t result = xRingbufferSend(bleDataBuffer, &channelData, sizeof(EMGData), 0); // Send data to buffer
-    // Serial.println(channelData.channelData[0]);
-
-    if (result != pdTRUE) {
-      Serial.println("Failed to send data to buffer.");
-    }
   }
 }
 
 void IRAM_ATTR DRDY__ISR() {
 
+  // Serial.println(millis());
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
   if (handleReadADS != NULL) {
@@ -162,7 +185,7 @@ void IRAM_ATTR DRDY__ISR() {
   }
 
   if (xHigherPriorityTaskWoken) {
-    portYIELD_FROM_ISR(); // Yield to the higher priority task immediately
+    portYIELD_FROM_ISR(); // go to readADS task
   }
 
 }
@@ -173,16 +196,32 @@ void setup() {
 
   Serial.println("Starting Setup...");
 
+  if (enableNotchFilter && !sendTestData){
+    // Initialising notch filters with coefficients
+    for (int i = 0; i < 8; i++){
+      biquad_notch_filter[i] = BiQuadFilterDF1<float>({b0, b1, b2}, {a0, a1, a2});
+    }
+  }
+  
+
   bleDataBuffer = xRingbufferCreate(20 * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
 
   if (bleDataBuffer == NULL) {
-    Serial.println("Failed to create ring buffer");
+    Serial.println("Failed to create ring buffer - bleDataBuffer");
+    while (true); // Stop execution if buffer creation fails
+  }
+
+  bleDataBufferRaw = xRingbufferCreate(20 * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
+
+  if (bleDataBufferRaw == NULL) {
+    Serial.println("Failed to create ring buffer - bleDataBufferRaw");
     while (true); // Stop execution if buffer creation fails
   }
 
   Serial.println("Starting BLE setup...");
   //BLE setup
   BLEDevice::init("EMG-Logger");
+  BLEDevice::setMTU(517); // allowing to send bigger data packets
   pServer = BLEDevice::createServer();  
   pServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -208,13 +247,16 @@ void setup() {
   pinMode(PWDN_, OUTPUT);
   pinMode(START, OUTPUT);
   pinMode(SDN_, OUTPUT);
-  digitalWrite(PWDN_, 1);
-  digitalWrite(START, 1);
-  digitalWrite(SDN_, 0); // TEMPORARILY SET LOW
+  digitalWrite(PWDN_, HIGH);
+  digitalWrite(START, HIGH);
+  digitalWrite(SDN_, HIGH);
+  
+  pinMode(17, OUTPUT);
+  digitalWrite(17, HIGH);
 
   // lead off detection
-  pinMode(LOD_PLUS, INPUT);
-  pinMode(LOD_NEG, INPUT);
+  // pinMode(LOD_PLUS, INPUT);
+  // pinMode(LOD_NEG, INPUT);
 
   // LED on Test Board
   pinMode(LED_PIN, OUTPUT);
@@ -226,13 +268,13 @@ void setup() {
   Serial.println();
   delay(100); // Short delay to ensure ADS is ready before configuration
 
-  Serial.println(ADS.getStatus(), BIN);
-
   // send ADS setup commands
   ADS.sendCommand(ADS119X_CMD_SDATAC); // pause data conversion to send config commands
   ADS.setDataRate(ADS119X_DRATE_1000SPS);
+  ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
   if (!sendTestData) {
-    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_8); // setting gain to 8 for all channels
+    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_12); // setting gain to 12 for all channels
+    // ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
     ADS.setAllChannelMux(ADS119X_CHnSET_MUX_NORMAL); 
     ADS.enableRLD();
   }
@@ -242,8 +284,9 @@ void setup() {
 
   attachInterrupt(DRDY_, DRDY__ISR, FALLING); // Attach interrupt to DRDY_ pin
 
-  xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 1, &handleBLE, 0);
-  xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 1, &handleTransmit, 0);
+  xTaskCreatePinnedToCore(parseADSDataTask, "ParseADS", 10000, NULL, 1, &handleParseADS, 0);
+  xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 2, &handleBLE, 0);
+  xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 2, &handleTransmit, 0);
   xTaskCreatePinnedToCore(readADSTask, "ReadADS", 10000, NULL, 1, &handleReadADS, 1);
 
 }

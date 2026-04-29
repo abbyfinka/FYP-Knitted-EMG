@@ -19,7 +19,7 @@ ADS119X::ADS119X(byte dataReady_Pin, byte reset_Pin, byte cs_Pin)
   
   // Start SPI
   SPI.begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS
-  SPI.beginTransaction( SPISettings(100000, MSBFIRST, SPI_MODE1));
+  SPI.beginTransaction( SPISettings(200000, MSBFIRST, SPI_MODE1));
   
 }
 
@@ -131,26 +131,17 @@ void ADS119X::setDataRate(byte dataRate)
 
 void ADS119X::readChannelData()
 {
-  byte inByte;
-
-  //Read  status 24 bits
+  _lastreadtime = micros();
+  //Serial.println(_lastreadtime);
+  // Read status 24 bits
   csLow(); //  open SPI
-  for (int i = 0; i < 3; i++)
-  {
-    inByte = xfer(0x00); //  read 24 bit status register (1100 + LOFF_STATP + LOFF_STATN + GPIO[7:4])
-    //Serial.println(inByte, BIN);
-    _boardStat = (_boardStat << 8) | inByte;
-  }
-  for (int i = 0; i < ADS119X_TOTAL_CH; i++) 
-  {    // Read all channels
-    for (int j = 0; j < ADS119X_BYTES_PER_CH; j++)
-    { //  read 16 bits of channel data in 2 byte chunks
-      inByte = xfer(0x00);
-      _channelData[i] = (_channelData[i] << 8) | inByte; // int data goes here
-    }
-  }
+  SPI.transferBytes(NULL, _statusReg, 3); // read 24 bit status register (1100 + LOFF_STATP + LOFF_STATN + GPIO[7:4])
+  SPI.transferBytes(NULL, _channelData, 16); // read all channel data
   csHigh(); // close SPI
-  // No need to convert 16bit to 32bit or anything as channelData is 16 bit int (represented with signed 2'c binary)
+  
+  lastOutput.timestamp = _lastreadtime;
+  memcpy(lastOutput.channelData, _channelData, 16);
+ 
 }
 
 
@@ -183,12 +174,44 @@ void ADS119X::setAllChannelMux(byte muxSetting )
    
 }
 
+#define ADS119X_CHnSET_GAIN_6         0x00
+#define ADS119X_CHnSET_GAIN_1         0x10
+#define ADS119X_CHnSET_GAIN_2         0x20
+#define ADS119X_CHnSET_GAIN_3         0x30
+#define ADS119X_CHnSET_GAIN_4         0x40
+#define ADS119X_CHnSET_GAIN_8         0x50
+#define ADS119X_CHnSET_GAIN_12        0x60
+
 
 void ADS119X::setAllChannelGain(byte gainSetting )
 {
  for (byte address = ADS119X_ADD_CH1SET; address < ADS119X_ADD_CH1SET +  _num_channels ; address++) {
    setChannelSettings(address, keepSetting(address) , gainSetting, keepSetting(address) ) ;
  } 
+
+ switch (gainSetting){
+  case ADS119X_CHnSET_GAIN_6:
+    gain = 6.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_1:
+    gain = 1.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_2:
+    gain = 2.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_3:
+    gain = 3.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_4:
+    gain = 4.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_8:
+    gain = 8.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_12:
+    gain = 12.0f;
+    break;
+ }
    
 }
 
@@ -381,18 +404,11 @@ void ADS119X::enableRLD() {
   startContinuousConversion(); 
 }
 
-EMGData ADS119X::getAllChannelData() {
-  
-  readChannelData();
+dataPacket* ADS119X::getAllChannelData() {
+  return &lastOutput;
+}
 
-  EMGData output;
-  output.timestamp = millis();
-  for (int ch = 0; ch < getNumberOfChannels(); ch++)
-  {
-    output.channelData[ch] = getChannelData(ch); // print in uV
-  }
-
-  // Serial.println(stringOutput);
-  return output;
+float ADS119X::getGain() {
+  return gain;
 }
 

@@ -39,3 +39,8 @@
 
 # debug information files
 *.dwo
+
+# Log files
+App/Logs/
+
+.pio/
