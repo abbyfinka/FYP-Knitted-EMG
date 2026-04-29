@@ -9,13 +9,14 @@
 #include "main.h"
 #include "ADS119X.h"
 #include "Filters.h"
+#include <Filters/BiQuad.hpp>
 #include <Filters/Notch.hpp>
 
 // UUIDs for BLE service and characteristic
 #define SERVICE_UUID        "cde33313-b7aa-4b32-b29f-9043b1d8e042"
 #define CHARACTERISTIC_UUID "89fea506-0482-4895-b474-843229dae557"
 
-bool sendTestData = false; // Flag to control sending test data instead of real ADS119X data
+bool sendTestData = true; // Flag to control sending test data instead of real ADS119X data
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
@@ -25,13 +26,25 @@ bool oldDeviceConnected = false;
 TaskHandle_t handleBLE;  // handle BLE connections
 TaskHandle_t handleTransmit;  // handle BLE data transmission
 TaskHandle_t handleReadADS = NULL;  // handle reading data from ADS1198
+TaskHandle_t handleParseADS; // converting data to float and filtering
 
 RingbufHandle_t bleDataBufferRaw;
 RingbufHandle_t bleDataBuffer; 
 
 const double f_n = 2 * 50 / 1000;
-auto notch_filter = simpleNotchFIR(f_n);
-bool notchFilter = true;
+auto simple_notch_filter = simpleNotchFIR(f_n);
+
+// coefficients for 50 Hz filter, Q = 30 for sharp notch
+const float b0 = 0.99487611f;
+const float b1 = -1.89236681f;
+const float b2 = 0.99487611f;
+const float a0 = 1.0f; // normalised
+const float a1 = -1.89236681f;
+const float a2 = 0.98975221f;
+
+// initialising a filter for each channel
+BiQuadFilterDF1<float> biquad_notch_filter[8];
+bool enableNotchFilter = false; // Flag to control whether to apply the notch filter to the data
 
 // Pin definitions
 #define CS_           10     // chip select pin
@@ -40,10 +53,7 @@ bool notchFilter = true;
 #define PWDN_         3      // power down pin
 #define START         8      // start pin
 #define SDN_          18     // shutdown pin
-// #define LOD_PLUS      16
-// #define LOD_NEG       17
-#define LED_PIN       15      // LED pin for debugging
-
+#define LED_PIN       15     // LED pin for debugging
 
 class MyServerCallbacks: 
 
@@ -92,66 +102,58 @@ void handleBLETask(void * pvParameters) {
 
 void parseADSDataTask(void * pvParameters) {
   for (;;) {
+    EMGData emg = {0};
     size_t itemSize;
     dataPacket* data1 = (dataPacket*)xRingbufferReceive(bleDataBufferRaw, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-    int16_t channelData1[8] = {0}; 
-    if (data1 != NULL) {
-
-      for (int i = 0; i < 8; i++) {
+    float channelData1[8] = {0}; 
+    if (data1 != NULL) 
+    {
+      for (int i = 0; i < 8; i++) 
+      {
         int index = i * 2;
         
-        // convert 2 uint8_t values to 1 int16_t value for each channel
-        if (sendTestData || !notchFilter) {
-          channelData1[i] = ((data1->channelData[index] << 8) | data1->channelData[index + 1]) * (2.4 / 32767); // ADC scaling to convert to mV
-        } else { // apply notch filter to data
-          double convertedData = (data1->channelData[index] << 8) | data1->channelData[index + 1];
-          convertedData = convertedData * (2.4 / 32767);
-          channelData1[i] = notch_filter(convertedData); 
+        int16_t rawData = ((int16_t)(data1->channelData[index] << 8) | (int16_t)data1->channelData[index + 1]); // combining two 8 bit values from ADC into 16 bit value for each channel
+        float convertedData = rawData * (2.4f / 32767.0f) * 1000.0f / ADS.getGain(); // scaled ADC values to mV
+        
+        // real time filtering
+
+        if (enableNotchFilter && !sendTestData) 
+        {
+          convertedData = biquad_notch_filter[i](convertedData); // applying notch filter
         }
+        
+        channelData1[i] = convertedData;
       }
-
-      EMGData emg = {data1->timestamp, *channelData1}; // Create EMGData struct with timestamp and channel data
-
-      BaseType_t result = xRingbufferSend(bleDataBuffer, &emg, sizeof(EMGData), 0); // Send data to buffer
+      
+      emg.timestamp = data1->timestamp;
+      memcpy(&emg.channelData, channelData1, sizeof(channelData1));
+      xRingbufferSend(bleDataBuffer, &emg, sizeof(EMGData), 0); // Send data to buffer
       vRingbufferReturnItem(bleDataBufferRaw, (void*)data1); // Return the item to the buffer after processing
-
-      // if (result != pdTRUE) {
-      //   Serial.println("Failed to send data to buffer.");
-      // }
-
     }
+
   }
 }
 
-void handleTransmitTask(void * pvParameters) {
-  for (;;) {
+void handleTransmitTask(void * pvParameters) 
+{
+  for (;;) 
+  {
  
-    // Serial.println("Checking buffer for data to send...");
-    // Serial.println("Data found in buffer, sending over BLE...");
-    size_t itemSize;
-    EMGData* data1 = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-    if (data1 != NULL) {
-
-      // EMGData dataToSend = *data; // Get the next data string from the buffer
-
-      TransmitData dataToSend;
-      memcpy(&dataToSend.data1, data1, sizeof(EMGData)); // Copy the first EMGData struct into the TransmitData struct
-
-      EMGData* data2 = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-      if (data2 != NULL){
-        memcpy(&dataToSend.data2, data2, sizeof(EMGData)); // Copy the first EMGData struct into the TransmitData struct
+    TransmitData dataToSend = {0};
+    for (int i = 0; i < NUM_OF_PACKETS; i++) 
+    {
+      size_t itemSize;
+      EMGData* data = (EMGData *)xRingbufferReceive(bleDataBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+      if (data != NULL) 
+      {
+        memcpy(&dataToSend.dataToSend[i], data, sizeof(EMGData)); // Copy data to the TransmitData struct
+        vRingbufferReturnItem(bleDataBuffer, (void*)data); // Return the item to the buffer after processing
       }
-
-      pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
-      if (deviceConnected) { pCharacteristic->notify(); } // Notify connected clients
-      vRingbufferReturnItem(bleDataBuffer, (void*)data1); // Return the item to the buffer after processing
-      vRingbufferReturnItem(bleDataBuffer, (void*)data2); // Return the item to the buffer after processing
     }
-    
 
-    //Serial.println(digitalRead(LOD_PLUS));
-    //Serial.println(digitalRead(LOD_NEG));
-    // Serial.println("No data to send.");
+    pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
+    if (deviceConnected) { pCharacteristic->notify(); } // Notify connected clients
+      
   }
 }
 
@@ -167,13 +169,9 @@ void readADSTask(void * pvParameters) {
     // }
 
     ADS.readChannelData();
-    dataPacket* channelData = ADS.getAllChannelData(); // Get all channel data as a string
-    BaseType_t result = xRingbufferSend(bleDataBuffer, channelData, sizeof(dataPacket), 0); // Send data to buffer
-    // Serial.println(channelData->channelData[0]);
+    dataPacket* channelData = ADS.getAllChannelData(); // Get all channel data
+    xRingbufferSend(bleDataBufferRaw, channelData, sizeof(dataPacket), 0); // Send data to buffer
 
-    // if (result != pdTRUE) {
-    //   Serial.println("Failed to send data to buffer.");
-    // }
   }
 }
 
@@ -198,6 +196,14 @@ void setup() {
 
   Serial.println("Starting Setup...");
 
+  if (enableNotchFilter && !sendTestData){
+    // Initialising notch filters with coefficients
+    for (int i = 0; i < 8; i++){
+      biquad_notch_filter[i] = BiQuadFilterDF1<float>({b0, b1, b2}, {a0, a1, a2});
+    }
+  }
+  
+
   bleDataBuffer = xRingbufferCreate(20 * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
 
   if (bleDataBuffer == NULL) {
@@ -215,6 +221,7 @@ void setup() {
   Serial.println("Starting BLE setup...");
   //BLE setup
   BLEDevice::init("EMG-Logger");
+  BLEDevice::setMTU(517); // allowing to send bigger data packets
   pServer = BLEDevice::createServer();  
   pServer->setCallbacks(new MyServerCallbacks());
   BLEService *pService = pServer->createService(SERVICE_UUID);
@@ -264,8 +271,9 @@ void setup() {
   // send ADS setup commands
   ADS.sendCommand(ADS119X_CMD_SDATAC); // pause data conversion to send config commands
   ADS.setDataRate(ADS119X_DRATE_1000SPS);
+  ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
   if (!sendTestData) {
-    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_8); // setting gain to 8 for all channels
+    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_12); // setting gain to 12 for all channels
     // ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
     ADS.setAllChannelMux(ADS119X_CHnSET_MUX_NORMAL); 
     ADS.enableRLD();
@@ -276,7 +284,7 @@ void setup() {
 
   attachInterrupt(DRDY_, DRDY__ISR, FALLING); // Attach interrupt to DRDY_ pin
 
-  xTaskCreatePinnedToCore(parseADSDataTask, "ParseADS", 10000, NULL, 1, &handleReadADS, 0);
+  xTaskCreatePinnedToCore(parseADSDataTask, "ParseADS", 10000, NULL, 1, &handleParseADS, 0);
   xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 2, &handleBLE, 0);
   xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 2, &handleTransmit, 0);
   xTaskCreatePinnedToCore(readADSTask, "ReadADS", 10000, NULL, 1, &handleReadADS, 1);

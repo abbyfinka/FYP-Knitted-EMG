@@ -174,12 +174,44 @@ void ADS119X::setAllChannelMux(byte muxSetting )
    
 }
 
+#define ADS119X_CHnSET_GAIN_6         0x00
+#define ADS119X_CHnSET_GAIN_1         0x10
+#define ADS119X_CHnSET_GAIN_2         0x20
+#define ADS119X_CHnSET_GAIN_3         0x30
+#define ADS119X_CHnSET_GAIN_4         0x40
+#define ADS119X_CHnSET_GAIN_8         0x50
+#define ADS119X_CHnSET_GAIN_12        0x60
+
 
 void ADS119X::setAllChannelGain(byte gainSetting )
 {
  for (byte address = ADS119X_ADD_CH1SET; address < ADS119X_ADD_CH1SET +  _num_channels ; address++) {
    setChannelSettings(address, keepSetting(address) , gainSetting, keepSetting(address) ) ;
  } 
+
+ switch (gainSetting){
+  case ADS119X_CHnSET_GAIN_6:
+    gain = 6.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_1:
+    gain = 1.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_2:
+    gain = 2.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_3:
+    gain = 3.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_4:
+    gain = 4.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_8:
+    gain = 8.0f;
+    break;
+  case ADS119X_CHnSET_GAIN_12:
+    gain = 12.0f;
+    break;
+ }
    
 }
 
@@ -373,15 +405,10 @@ void ADS119X::enableRLD() {
 }
 
 dataPacket* ADS119X::getAllChannelData() {
-  
-  // Serial.println(_lastreadtime);
-
-  // for (int ch = 0; ch < getNumberOfChannels(); ch++)
-  // {
-  //   output.channelData[ch] = getChannelData(ch); // print in uV
-  // }
-
-  // Serial.println(stringOutput);
   return &lastOutput;
+}
+
+float ADS119X::getGain() {
+  return gain;
 }
 

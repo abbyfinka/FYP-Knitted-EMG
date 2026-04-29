@@ -213,6 +213,7 @@ class ADS119X {
 
   int32_t getStatus();
   int16_t getChannelData(byte channel);  
+  float getGain();
 
   byte getRegisterSize(); 
   byte getRegister(byte address); 
@@ -253,8 +254,8 @@ class ADS119X {
   uint8_t _statusReg[3];
   uint8_t _channelData[16];
 
+  float gain;
 
-  
   dataPacket lastOutput;
   
 };

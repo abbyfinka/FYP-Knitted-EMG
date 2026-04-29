@@ -4,16 +4,17 @@
 #include <Arduino.h>
 #include <SPI.h>
 
+#define NUM_OF_PACKETS 10
+
 struct EMGData {
   uint32_t timestamp; // Timestamp in milliseconds
-  int16_t channelData[8]; // Data for 8 channels
+  float channelData[8]; // Data for 8 channels
 
 };
 
-// package two EMGData structs together for more efficient BLE transmission
+// package EMGData structs together for more efficient BLE transmission
 struct TransmitData {
-  EMGData data1;
-  EMGData data2;
+  EMGData dataToSend[NUM_OF_PACKETS];
 };
 
 

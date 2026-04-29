@@ -21,16 +21,17 @@ from scipy import signal
 SERVICE_UUID = "cde33313-b7aa-4b32-b29f-9043b1d8e042"
 CHARACTERISTIC_UUID = "89fea506-0482-4895-b474-843229dae557"
 TARGET_DEVICE_NAME = "EMG-Logger"
-PRINT_INTERVAL = 1
+PRINT_INTERVAL = 0.512
 
 sampling_frequency = 1000
 data_buffer_len = sampling_frequency * 2
 time_step = 1 / sampling_frequency
-ylim = 5000
+ylim = 5
+ylim_freq = 5000
 sample_index = 1
 
 logging = True
-filtering = True
+filtering = False
 connect = True
 
 # Create log file if logging enabled
@@ -51,30 +52,21 @@ async def process_data(queue):
     while True:
         # print('processing data...')
         data = await queue.get() # get data from queue when available
-        
+        # print(data)
         # processing data
         try: 
-            format_string = '<I8hI8h'
+            format_string = '<' + 'I8f' * 10
             unpacked_data = struct.unpack(format_string, data)
     
-            timestamp1 = unpacked_data[0]
-            channels1 = unpacked_data[1:8] # channel data (8 channels, 16-bit signed integers)
-            timestamp2 = unpacked_data[9]
-            channels2 = unpacked_data[10:17] # channel data (8 channels, 16-bit signed integers)
-
-
-            if (logging):
-                log_file.write(str(timestamp1) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels1) + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
+            for i in range(0, 10):
+                timestamp = unpacked_data[i * 9]
+                channels = unpacked_data[1 + i * 9: 9 + i * 9]
+                log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
+                # log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
                 sample_index += 1
-                log_file.write(str(timestamp2) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels2) + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
-                sample_index += 1
-                # log_file.write(datetime.now().strftime("%Y-%m-%d %H:%M:%S") + ": " + str(timestamp1) + ": " + str(channels1) + "\n")
-                
-            for n in range(0,7):
-                # append new values``
-                channel_data[n].append(float(channels1[n]))
-                channel_data[n].append(float(channels2[n]))
-        
+                for n in range(0,8):
+                    # append new values
+                    channel_data[n].append(channels[n])
 
         except Exception as e:
             print("Error decoding data " + str(e))
@@ -154,18 +146,19 @@ print("Setting up plots...")
 for i in range(8):
     # time domain plots
     ax_time = fig.add_subplot(gs[i, 0])
-    plot, = ax_time.plot([], [], label=f"Channel {i+1}", linewidth=0.5)
-    time_plots.append(plot)
+    time_plot, = ax_time.plot([], [], label=f"Channel {i+1}", linewidth=0.5)
+    time_plots.append(time_plot)
     ax_time.set_ylim(-ylim, ylim)
     ax_time.set_xlim(0, data_buffer_len * time_step)
     ax_time.set_ylabel(f"Ch {i+1}")
     time_axes.append(ax_time)
+
     # frequency domain plots
     ax_freq = fig.add_subplot(gs[i, 1])
+    freq_plot, = ax_freq.plot([], [], label=f"Channel {i+1}", linewidth=0.5)
+    freq_plots.append(freq_plot)
     ax_freq.set_xlim(0, sampling_frequency/2)
-    ax_freq.set_ylim(0, 300000)
-    plot, = ax_freq.plot([], [], label=f"Channel {i+1}", linewidth=0.5)
-    freq_plots.append(plot)
+    ax_freq.set_ylim(0, ylim_freq)
     freq_axes.append(ax_freq)
 
 time_axes[-1].set_xlabel("Time / s")
@@ -184,10 +177,10 @@ def animate(frame):
 
     for idx, line in enumerate(freq_plots):
         y = list(channel_data[idx])
-        if filtering and len(y) > 1:
-            sos_bandpass = signal.butter(8, [20, 499], 'bandpass', fs=sampling_frequency, output='sos')
-            y = signal.sosfilt(sos_bandpass, y)
         if len(y) > 1:
+            if filtering:
+                sos_bandpass = signal.butter(8, [20, 499], 'bandpass', fs=sampling_frequency, output='sos')
+                y = signal.sosfilt(sos_bandpass, y)
             freqs = np.fft.rfftfreq(len(y), d=time_step)
             fft_values = np.abs(np.fft.rfft(y))
             line.set_data(freqs, fft_values)
