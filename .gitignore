@@ -42,5 +42,6 @@
 
 # Log files
 App/Logs/
+MATLAB/
 
 .pio/
