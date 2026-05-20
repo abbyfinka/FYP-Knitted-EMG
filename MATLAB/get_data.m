@@ -1,7 +1,7 @@
 %% load EMG data
 
 clear; clc; 
-get_path = "C:\Imperial\FYP-Knitted-EMG\App\Logs\2026-04-09_12-26-26_emg_log.txt";
+get_path = "C:\Imperial\FYP-Knitted-EMG\App\Logs\NoFiltering-StandardElectrodes-Data1.txt";
 lines = readlines(get_path);
 lines = split(lines(1:end-1), ':');
 
@@ -22,10 +22,10 @@ end
 
 %% get sampling rate
 
-sampling_rate = 1 / ((esp_timestamp(2) - esp_timestamp(1)) / 1000);
+sampling_rate = 1 / ((round(esp_timestamp(2)/1000) - round(esp_timestamp(1)/1000)) / 1000);
 
 %% store as .mat
 
-put_path = "C:\Imperial\FYP-Knitted-EMG\MATLAB\Data\dataset1.mat";
+put_path = "C:\Imperial\FYP-Knitted-EMG\MATLAB\Data\NoFiltering-StandardElectrodes-Data1.mat";
 save(put_path, "laptop_timestamp", "esp_timestamp", "channel_data", "sampling_rate", "num_channels");
 

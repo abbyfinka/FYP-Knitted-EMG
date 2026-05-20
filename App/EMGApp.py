@@ -27,11 +27,12 @@ sampling_frequency = 1000
 data_buffer_len = sampling_frequency * 2
 time_step = 1 / sampling_frequency
 ylim = 5
-ylim_freq = 5000
+ylim_freq = 100
 sample_index = 1
 
+# Config variables
 logging = True
-filtering = False
+filtering = True
 connect = True
 
 # Create log file if logging enabled
@@ -61,8 +62,8 @@ async def process_data(queue):
             for i in range(0, 10):
                 timestamp = unpacked_data[i * 9]
                 channels = unpacked_data[1 + i * 9: 9 + i * 9]
-                log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
-                # log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
+                # log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
+                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
                 sample_index += 1
                 for n in range(0,8):
                     # append new values
@@ -150,7 +151,7 @@ for i in range(8):
     time_plots.append(time_plot)
     ax_time.set_ylim(-ylim, ylim)
     ax_time.set_xlim(0, data_buffer_len * time_step)
-    ax_time.set_ylabel(f"Ch {i+1}")
+    ax_time.set_ylabel(f"Ch {i+1} / mV")
     time_axes.append(ax_time)
 
     # frequency domain plots

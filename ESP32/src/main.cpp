@@ -16,7 +16,7 @@
 #define SERVICE_UUID        "cde33313-b7aa-4b32-b29f-9043b1d8e042"
 #define CHARACTERISTIC_UUID "89fea506-0482-4895-b474-843229dae557"
 
-bool sendTestData = true; // Flag to control sending test data instead of real ADS119X data
+bool sendTestData = false; // Flag to control sending test data instead of real ADS119X data
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
@@ -35,16 +35,33 @@ const double f_n = 2 * 50 / 1000;
 auto simple_notch_filter = simpleNotchFIR(f_n);
 
 // coefficients for 50 Hz filter, Q = 30 for sharp notch
-const float b0 = 0.99487611f;
-const float b1 = -1.89236681f;
-const float b2 = 0.99487611f;
-const float a0 = 1.0f; // normalised
-const float a1 = -1.89236681f;
-const float a2 = 0.98975221f;
+const float n_b0 = 0.98478425f;
+const float n_b1 = -1.87317095f;
+const float n_b2 = 0.98478425f;
+const float n_a0 = 1.0f; // normalised
+const float n_a1 = -1.87317095f;
+const float n_a2 = 0.96956849f;
+
+const float h_b0 = 0.98985427f;
+const float h_b1 = -1.97970854f;
+const float h_b2 = 0.98985427f;
+const float h_a0 = 1.0f; // normalised
+const float h_a1 = -1.97187235f;
+const float h_a2 = 0.98754473f;
+
+const float l_b0 = 0.99967607f;
+const float l_b1 = -1.99935215f;
+const float l_b2 = 0.99967607f;
+const float l_a0 = 1.0f; // normalised
+const float l_a1 = -1.99933242f;
+const float l_a2 = 0.99937188f;
 
 // initialising a filter for each channel
 BiQuadFilterDF1<float> biquad_notch_filter[8];
-bool enableNotchFilter = false; // Flag to control whether to apply the notch filter to the data
+BiQuadFilterDF1<float> biquad_hp_filter[8];
+BiQuadFilterDF1<float> biquad_lp_filter[8];
+bool enableNotchFilter = true; // Flag to control whether to apply the notch filter to the data
+bool enableBandpassFilter = false;
 
 // Pin definitions
 #define CS_           10     // chip select pin
@@ -105,7 +122,7 @@ void parseADSDataTask(void * pvParameters) {
     EMGData emg = {0};
     size_t itemSize;
     dataPacket* data1 = (dataPacket*)xRingbufferReceive(bleDataBufferRaw, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-    float channelData1[8] = {0}; 
+    float channelData[8] = {0}; 
     if (data1 != NULL) 
     {
       for (int i = 0; i < 8; i++) 
@@ -113,7 +130,7 @@ void parseADSDataTask(void * pvParameters) {
         int index = i * 2;
         
         int16_t rawData = ((int16_t)(data1->channelData[index] << 8) | (int16_t)data1->channelData[index + 1]); // combining two 8 bit values from ADC into 16 bit value for each channel
-        float convertedData = rawData * (2.4f / 32767.0f) * 1000.0f / ADS.getGain(); // scaled ADC values to mV
+        float convertedData = rawData * (2.4f / 32767.0f) * 1000.0f; // scaled ADC values to mV
         
         // real time filtering
 
@@ -121,12 +138,29 @@ void parseADSDataTask(void * pvParameters) {
         {
           convertedData = biquad_notch_filter[i](convertedData); // applying notch filter
         }
+
+        if (enableBandpassFilter && !sendTestData)
+        {
+          convertedData = biquad_hp_filter[i](convertedData); // applying highpass filter
+          convertedData = biquad_lp_filter[i](convertedData); // applying lowpass filter
+        }
         
-        channelData1[i] = convertedData;
+        channelData[i] = convertedData;
       }
+
+      // for (int i = 0; i < 8; i++) {
+      //   // Print the current element on the same line
+      //   Serial.print(channelData[i]);
+        
+      //   // Add a comma and space separator, but skip it for the very last element
+      //   if (i < 7) {
+      //     Serial.print(", ");
+      //   }
+      // }
+      // Serial.println();
       
       emg.timestamp = data1->timestamp;
-      memcpy(&emg.channelData, channelData1, sizeof(channelData1));
+      memcpy(&emg.channelData, channelData, sizeof(channelData));
       xRingbufferSend(bleDataBuffer, &emg, sizeof(EMGData), 0); // Send data to buffer
       vRingbufferReturnItem(bleDataBufferRaw, (void*)data1); // Return the item to the buffer after processing
     }
@@ -162,11 +196,6 @@ void readADSTask(void * pvParameters) {
     
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Wait until notified by the DRDY_ ISR
     // pdTRUE clears missed notifications rather than accumulating in a queue
-    
-    // if (!ADS.isDRDY()) {
-    //     // Serial.println("Data ready signal received, but DRDY_ pin is not low. Skipping data read.");
-    //     continue; // Skip to the next loop immediately
-    // }
 
     ADS.readChannelData();
     dataPacket* channelData = ADS.getAllChannelData(); // Get all channel data
@@ -196,13 +225,22 @@ void setup() {
 
   Serial.println("Starting Setup...");
 
-  if (enableNotchFilter && !sendTestData){
-    // Initialising notch filters with coefficients
-    for (int i = 0; i < 8; i++){
-      biquad_notch_filter[i] = BiQuadFilterDF1<float>({b0, b1, b2}, {a0, a1, a2});
+  if (!sendTestData){
+    if (enableNotchFilter) {
+      // Initialising a notch filter for each channel with calculated coefficients
+      for (int i = 0; i < 8; i++){
+        biquad_notch_filter[i] = BiQuadFilterDF1<float>({n_b0, n_b1, n_b2}, {n_a0, n_a1, n_a2});
+      }
+    }
+    
+    if (enableBandpassFilter) {
+      // initialising high pass and low pass filters with calculated coefficients
+      for (int i = 0; i < 8; i++){
+        biquad_hp_filter[i] = BiQuadFilterDF1<float>({h_b0, h_b1, h_b2}, {h_a0, h_a1, h_a2});
+        biquad_lp_filter[i] = BiQuadFilterDF1<float>({l_b0, l_b1, l_b2}, {l_a0, l_a1, l_a2});
+      }
     }
   }
-  
 
   bleDataBuffer = xRingbufferCreate(20 * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
 
@@ -238,7 +276,6 @@ void setup() {
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x06);
   pAdvertising->setMinPreferred(0x12);
   BLEDevice::startAdvertising();
   Serial.println("Started BLE advertising...");
@@ -273,8 +310,8 @@ void setup() {
   ADS.setDataRate(ADS119X_DRATE_1000SPS);
   ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
   if (!sendTestData) {
-    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_12); // setting gain to 12 for all channels
-    // ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
+    // ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_12); // setting gain to 12 for all channels
+    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_6);
     ADS.setAllChannelMux(ADS119X_CHnSET_MUX_NORMAL); 
     ADS.enableRLD();
   }
