@@ -8,6 +8,11 @@
 #define BLE_BUFFER_SIZE         20      // Buffer size for transmission over BLE
 #define INPUT_DATA_BUFFER       20      // Buffer size input from the ADS1198
 
+// UUIDs for BLE service and characteristic
+#define SERVICE_UUID                "cde33313-b7aa-4b32-b29f-9043b1d8e042"
+#define DATA_CHARACTERISTIC_UUID    "89fea506-0482-4895-b474-843229dae557"
+#define GESTURE_CHARACTERISTIC_UUID "9122613f-3d96-4ba2-9bb5-382cbda24f02"
+
 // 50 Hz notch, Q = 30
 const float n_b0 = 0.98478425f;
 const float n_b1 = -1.87317095f;
@@ -41,6 +46,11 @@ struct EMGData {
 // package EMGData structs together for more efficient BLE transmission
 struct TransmitData {
   EMGData dataToSend[N_PACKETS];
+};
+
+struct Gesture {
+  int gesture;
+  float probability;
 };
 
 

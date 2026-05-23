@@ -17,14 +17,10 @@
 #define TEST_DATA_EN            0       // Flag to control sending test data instead of real ADS119X data
 #define NOTCH_EN                1       // Flag to control whether to apply the notch filter
 #define BANDPASS_EN             1       // Flag to control whether to apply bandpass filter
-#define TRANSMIT_EN             0       // Flag to control whether to send full data over BLE or just most recent gesture
-
-// UUIDs for BLE service and characteristic
-#define SERVICE_UUID        "cde33313-b7aa-4b32-b29f-9043b1d8e042"
-#define CHARACTERISTIC_UUID "89fea506-0482-4895-b474-843229dae557"
 
 BLEServer* pServer = NULL;
-BLECharacteristic* pCharacteristic = NULL;
+BLECharacteristic* pDataCharacteristic = NULL;
+BLECharacteristic* pGestureCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
@@ -34,7 +30,9 @@ TaskHandle_t handleTransmit;          // handle BLE data transmission
 TaskHandle_t handleReadADS = NULL;    // handle reading data from ADS1198
 TaskHandle_t handleParseADS;          // converting data to float and filtering
 TaskHandle_t handleFeature;           // feature extraction
+TaskHandle_t handleInterference;      // running interference
 
+// Buffers
 RingbufHandle_t bleDataBufferRaw;     // buffer for raw ADS1198 data
 RingbufHandle_t bleDataBuffer;        // buffer for data that needs to be sent over BLE
 RingbufHandle_t processingBuffer;     // buffer for data to be classified
@@ -169,8 +167,8 @@ void handleTransmitTask(void * pvParameters)
       }
     }
 
-    pCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
-    if (deviceConnected) { pCharacteristic->notify(); } // Notify connected clients
+    pDataCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
+    if (deviceConnected) { pDataCharacteristic->notify(); } // Notify connected clients
 
   }
 }
@@ -197,29 +195,38 @@ void handleFeatureExtractionTask(void * pvParameters)
       }
     }
 
+    // verifying windows
+    for (int i = 0; i < WINDOW_SIZE; i++)
+    {
+      Serial.print(nextWindow[i].channelData[3]);
+      Serial.print(", ");
+      Serial.println(" ");
+    }
+
     memcpy(currentWindow, nextWindow, sizeof(EMGData)); // Copy next window to current window
     float features[N_FEATURES * 8] = {0};
     gc.extractFeatures(currentWindow, features);
     
     // Adding data to buffer for classification
-    //xRingbufferSend(featureBuffer, &features, sizeof(float) * N_FEATURES, 0);
+    xRingbufferSend(featureBuffer, &features, sizeof(float) * N_FEATURES, 0);
   }
 }
 
 void handleClassificationTask(void * pvParameters)
 {
-  for (;;) 
+  Gesture predictedGesture = {0};
+  size_t itemSize;
+  float* features = (float *)xRingbufferReceive(featureBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+  if (features != NULL) 
   {
+    predictedGesture = gc.runInterference(features);
+    vRingbufferReturnItem(featureBuffer, (void*)features); // Return the item to the buffer after processing
 
-    size_t itemSize;
-    float* data = (float *)xRingbufferReceive(featureBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-    if (data != NULL) 
-    {
-      vRingbufferReturnItem(processingBuffer, (void*)data); // Return the item to the buffer after processing
-    }
-
+    pGestureCharacteristic->setValue((uint8_t*)&predictedGesture, sizeof(predictedGesture)); // Set the characteristic value
+    if (deviceConnected) { pGestureCharacteristic->notify(); } // Notify connected clients
   }
 }
+
 
 void readADSTask(void * pvParameters) 
 {
@@ -310,19 +317,31 @@ void setup()
 
   Serial.println("Starting BLE setup...");
   BLEDevice::init("EMG-Logger");
-  BLEDevice::setMTU(517); // allowing to send bigger data packets
+  // BLEDevice::setMTU(517); // allowing to send bigger data packets
   pServer = BLEDevice::createServer();  
   pServer->setCallbacks(new MyServerCallbacks());
+
+  // Initialise service
   BLEService *pService = pServer->createService(SERVICE_UUID);
-  pCharacteristic = pService->createCharacteristic(CHARACTERISTIC_UUID,
-                            BLECharacteristic::PROPERTY_READ   |
-                            BLECharacteristic::PROPERTY_WRITE  |
-                            BLECharacteristic::PROPERTY_NOTIFY |
-                            BLECharacteristic::PROPERTY_INDICATE);
+
+  // Initialise characteristic that holds most recent data
+  pDataCharacteristic = pService->createCharacteristic(DATA_CHARACTERISTIC_UUID,
+                                                        BLECharacteristic::PROPERTY_READ   |
+                                                        BLECharacteristic::PROPERTY_WRITE  |
+                                                        BLECharacteristic::PROPERTY_NOTIFY |
+                                                        BLECharacteristic::PROPERTY_INDICATE);
+  pDataCharacteristic->addDescriptor(new BLE2902());
+  pDataCharacteristic->setValue("Initial value");
   
-  pCharacteristic->addDescriptor(new BLE2902());
-  
-  pCharacteristic->setValue("Initial value");
+  // Initialise characteristic that holds most recent gesture
+  pGestureCharacteristic = pService->createCharacteristic(GESTURE_CHARACTERISTIC_UUID,
+                                                        BLECharacteristic::PROPERTY_READ   |
+                                                        BLECharacteristic::PROPERTY_WRITE  |
+                                                        BLECharacteristic::PROPERTY_NOTIFY |
+                                                        BLECharacteristic::PROPERTY_INDICATE);
+  pGestureCharacteristic->addDescriptor(new BLE2902());
+  pGestureCharacteristic->setValue("Initial value");
+
   pService->start();
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
@@ -368,21 +387,6 @@ void setup()
   delay(10);
   ADS.startContinuousConversion(); // start reading data continuously
 
-  // -------------------- AIFES Setup (Gesture Classifcation) -------------------- //
-
-  aimodel_t *neural_network = init_neural_network();
-
-
-  uint16_t input_shape[] = {1, 1, 4, 3}; // [batch-size, channels, height, width] <- channels first format
-	aitensor_t input_tensor = AITENSOR_4D_F32(input_shape, input_data);
-
-  // Create an empty output tensor
-	float output_data[1];
-	uint16_t output_shape[2] = {1, 1}; // [batch-size, output neurons]
-	aitensor_t output_tensor = AITENSOR_2D_F32(output_shape, output_data);
-
-
-
   // -------------------- RTOS Tasks Setup -------------------- //
 
   attachInterrupt(DRDY_, DRDY__ISR, FALLING); // Attach interrupt to DRDY_ pin
@@ -392,6 +396,7 @@ void setup()
   xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 2, &handleTransmit, 0);
   xTaskCreatePinnedToCore(readADSTask, "ReadADS", 10000, NULL, 1, &handleReadADS, 1);
   xTaskCreatePinnedToCore(handleFeatureExtractionTask, "FeatureExtraction", 10000, NULL, 1, &handleFeature, 0);
+  xTaskCreatePinnedToCore(handleClassificationTask, "Classify", 10000, NULL, 2, &handleInterference, 0);
 
 }
 

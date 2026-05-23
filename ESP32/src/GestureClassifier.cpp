@@ -2,79 +2,38 @@
 #include "GestureClassifier.h"
 #include <math.h>
 #include <aifes.h>
-#include <aifes_math.h>
 #include "weights.h"
 
-aimodel_t model;
+// aifes tutorial: https://projecthub.arduino.cc/aifes_team/aifes-express-tutorial-feedforward-neural-network-float32-6cbb7e
+// https://www.hackster.io/aifes_team/aifes-inference-tutorial-f44d96
 
-// Layer definition
-uint16_t input_layer_shape[] = {1, 1, 4, 3}; // [batch-size, channels, height, width] <- channels first format
-ailayer_input_f32_t input_layer = AILAYER_INPUT_F32_M(4, input_layer_shape);
-ailayer_conv2d_t conv2d_layer_1 = AILAYER_CONV2D_F32_M(
-                                                        /* filters =*/     2,
-                                                        /* kernel_size =*/ HW(2, 2),
-                                                        /* stride =*/      HW(1, 1),
-                                                        /* dilation =*/    HW(1, 1),
-                                                        /* padding =*/     HW(0, 0),
-                                                        /* weights =*/     kernel_data_conv2d_1,
-                                                        /* bias =*/        bias_data_conv2d_1);
+// # inputs -> # neurons in hidden layer -> outputs
+uint32_t FNN_structure[FNN_LAYERS] = {N_INPUTS, N_HIDDEN_NEURONS, N_HIDDEN_NEURONS, N_OUTPUTS};
+// activation function at each layer
+AIFES_E_activations FNN_activations[FNN_LAYERS - 1] = {AIfES_E_relu, AIfES_E_relu};
 
-ailayer_sigmoid_f32_t sigmoid_layer_1   = AILAYER_SIGMOID_F32_M();
-ailayer_flatten_t flatten_layer         = AILAYER_FLATTEN_F32_M();
-ailayer_dense_f32_t dense_layer_1       = AILAYER_DENSE_F32_M(
-                                                                /* neurons =*/  1,
-                                                                /* weights =*/  weights_data_dense_1,
-                                                                /* bias =*/     bias_data_dense_1 );
-ailayer_sigmoid_f32_t sigmoid_layer_2   = AILAYER_SIGMOID_F32_M();
+// AIfES Express struct 
+AIFES_E_model_parameter_fnn_f32 FNN;
 
-void *inference_memory;
+uint16_t input_shape[2] = {DATASETS, (uint16_t)FNN_structure[0]};
+uint16_t output_shape[2] = {1, (uint16_t)FNN_structure[FNN_LAYERS - 1]}; 
 
-aimodel_t GestureClassifier::*init_neural_network()
+float GestureClassifier::normalise(float data)
 {
-  // Layer pointer to perform the connection
-  ailayer_t *x;
-
-  // The channels first related functions ("chw" or "cfirst") are used, because the input data is given as channels first format.
-  model.input_layer = ailayer_input_f32_default(&input_layer);
-  x = ailayer_conv2d_chw_f32_default(&conv2d_layer_1, model.input_layer);
-  x = ailayer_sigmoid_f32_default(&sigmoid_layer_1, x);
-  x = ailayer_flatten_f32_default(&flatten_layer, x);
-  x = ailayer_dense_f32_default(&dense_layer_1, x);
-  x = ailayer_sigmoid_f32_default(&sigmoid_layer_2, x);
-  model.output_layer = x;
-
-  // Finish the model creation by checking the connections and setting some parameters for further processing
-  aialgo_compile_model(&model);
-
-  Serial.print(F("\n-------------- Neural network model structure ---------------\n"));
-  aialgo_print_model_structure(&model);
-  Serial.print(F("--------------------------------------------------------\n\n"));
-
-  // Allocate memory for intermediate results of the inference
-  uint32_t inference_memory_size = aialgo_sizeof_inference_memory(&model);
-  Serial.print("The model needs "); Serial.print(inference_memory_size); Serial.println(" bytes of memory for inference.\n");
-  inference_memory = malloc(inference_memory_size);
-
-  // Schedule the memory to the model
-  aialgo_schedule_inference_memory(&model, inference_memory, inference_memory_size);
-
-  return &model;
-}
-
-float GestureClassifier::normalise(float data){
     return (data - TRAIN_MEAN) / TRAIN_SD;
 }
 
-void GestureClassifier::extractFeatures(EMGData* frame, float features[]) {
-
-    //float *iemg, *msv, *var, *rms, *ln_rms, *kurt, *skew, *arm;
+void GestureClassifier::extractFeatures(EMGData* frame, float features[]) 
+{
 
     float iemg[8], msv[8], var[8], rms[8], ln_rms[8], kurt[8], skew[8], arm[8];
 
-    Serial.printf("Start %lu\n", micros());
-    for (int i = 0; i < WINDOW_SIZE; i++){
+    // Serial.printf("Start %lu\n", micros());
+    for (int i = 0; i < WINDOW_SIZE; i++)
+    {
 
-        for (int c = 0; c < 8; c++){
+        for (int c = 0; c < 8; c++)
+        {
             // Integrated EMG (IEMG)   
             iemg[c] = iemg[c] + fabs(normalise(frame[i].channelData[c]));
 
@@ -94,24 +53,41 @@ void GestureClassifier::extractFeatures(EMGData* frame, float features[]) {
             skew[c] = skew[c] + pow(((normalise(frame[i].channelData[c]) - TRAIN_MEAN) / TRAIN_SD), 3);
         }
     }
-    Serial.printf("End %lu\n", micros());
+    // Serial.printf("End %lu\n", micros());
 
     // return features: iemg, mse, variance, rms, ln(rms), kurtosis, skewness
 
-    for (int c = 0; c < 8; c++) {
+    // assigning features to array
+    for (int c = 0; c < 8; c++) 
+    {
         features[c] = iemg[c]; 
-        // features[c + 8] = msv[c] / WINDOW_SIZE;
-        // features[c + 16] = var[c] / WINDOW_SIZE;
-        // features[c + 24] = sqrt(rms[c] / WINDOW_SIZE);
-        // features[c + 32] = log(sqrt(rms[c] / WINDOW_SIZE));
-        // features[c + 40] = (kurt[c] / WINDOW_SIZE) - 3;
-        // features[c + 48] = skew[c] / WINDOW_SIZE;
+        features[c + 8] = msv[c] / WINDOW_SIZE;
+        features[c + 16] = var[c] / WINDOW_SIZE;
+        features[c + 24] = sqrt(rms[c] / WINDOW_SIZE);
+        features[c + 32] = log(sqrt(rms[c] / WINDOW_SIZE));
+        features[c + 40] = (kurt[c] / WINDOW_SIZE) - 3;
+        features[c + 48] = skew[c] / WINDOW_SIZE;
     }
 
-            
+}
 
+Gesture GestureClassifier::runInterference(float input_data[])
+{
+    float output_data[(uint16_t)FNN_structure[FNN_LAYERS - 1]]; 
+    aitensor_t output_tensor = AITENSOR_2D_F32(output_shape, output_data);
+    aitensor_t input_tensor = AITENSOR_2D_F32(input_shape, input_data); 
 
+    AIFES_E_inference_fnn_f32(&input_tensor,&FNN,&output_tensor);    
 
+    Gesture currentGesture = {0};
+    for (int i = 1; i < (uint16_t)FNN_structure[FNN_LAYERS - 1]; i++) {
+        if (output_data[i] > output_data[currentGesture.gesture]) {
+            currentGesture.gesture = i;
+            currentGesture.probability = output_data[i];
+        }
+    }
+
+    return currentGesture;
 }
 
 
