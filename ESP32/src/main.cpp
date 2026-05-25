@@ -11,7 +11,7 @@
 #include "ADS119X.h"
 #include "Filters.h"
 #include <Filters/BiQuad.hpp>
-#include <Filters/Notch.hpp>
+#include <AH/Filters/EMA.hpp>
 #include <aifes.h>
 
 #define TEST_DATA_EN            0       // Flag to control sending test data instead of real ADS119X data
@@ -44,6 +44,7 @@ float input[N_FEATURES];
 BiQuadFilterDF1<float> biquad_notch_filter[8];
 BiQuadFilterDF1<float> biquad_hp_filter[8];
 BiQuadFilterDF1<float> biquad_lp_filter[8];
+EMA<EMA_K, float> ema;
 
 EMGData currentWindow[WINDOW_SIZE] = {0};
 EMGData nextWindow[WINDOW_SIZE] = {0};
@@ -76,7 +77,6 @@ class MyServerCallbacks:
 
 ADS119X ADS(DRDY_, RESET_, CS_); // Initialise ADS119X
 GestureClassifier gc; // Initialise classifier
-EmaFilter ema(EMA_ALPHA);
 
 void handleBLETask(void * pvParameters) 
 {
@@ -130,7 +130,7 @@ void parseADSDataTask(void * pvParameters)
         if (BANDPASS_EN && !TEST_DATA_EN)
         {
           // Exponential Moving Average filter to remove fluctuating DC offset
-          convertedData = ema.Run(convertedData);
+          convertedData = ema.filter(convertedData);
 
           // applying biquad filters
           convertedData = biquad_hp_filter[i](convertedData); // applying highpass filter
@@ -300,6 +300,7 @@ void setup()
         biquad_hp_filter[i] = BiQuadFilterDF1<float>({h_b0, h_b1, h_b2}, {h_a0, h_a1, h_a2});
         biquad_lp_filter[i] = BiQuadFilterDF1<float>({l_b0, l_b1, l_b2}, {l_a0, l_a1, l_a2});
       }
+      ema = EMA<EMA_K, float>();
     }
   }
 

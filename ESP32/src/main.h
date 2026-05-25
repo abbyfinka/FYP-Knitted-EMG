@@ -13,7 +13,7 @@
 #define DATA_CHARACTERISTIC_UUID    "89fea506-0482-4895-b474-843229dae557"
 #define GESTURE_CHARACTERISTIC_UUID "9122613f-3d96-4ba2-9bb5-382cbda24f02"
 
-#define EMA_ALPHA 0.5
+#define EMA_K 1
 
 // 50 Hz notch, Q = 30
 const float n_b0 = 0.98478425f;
@@ -54,22 +54,5 @@ struct Gesture {
   int gesture;
   float probability;
 };
-
-class EmaFilter
-{
-  public:
-      EmaFilter(double alpha) :
-          m_alpha(alpha), m_lastOutput(0.0) {}
-
-      double Run(double input)
-      {
-          m_lastOutput = m_alpha * input + (1 - m_alpha) * m_lastOutput;
-          return m_lastOutput;
-      }
-  private:
-      double m_alpha;
-      double m_lastOutput;
-};
-
 
 #endif // MAIN_H
