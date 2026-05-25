@@ -76,13 +76,15 @@ class MyServerCallbacks:
 
 ADS119X ADS(DRDY_, RESET_, CS_); // Initialise ADS119X
 GestureClassifier gc; // Initialise classifier
+EmaFilter ema(EMA_ALPHA);
 
 void handleBLETask(void * pvParameters) 
 {
   for (;;) 
   {
     // Disconnecting
-    if (!deviceConnected && oldDeviceConnected) {
+    if (!deviceConnected && oldDeviceConnected) 
+    {
       delay(500); // Give the bluetooth stack the chance to get things ready
       pServer->startAdvertising(); // Restart advertising
       Serial.println("Start advertising");
@@ -91,7 +93,8 @@ void handleBLETask(void * pvParameters)
       digitalWrite(LED_PIN, LOW); // Turn on LED to indicate connection
     }
     // Connecting
-    if (deviceConnected && !oldDeviceConnected) {
+    if (deviceConnected && !oldDeviceConnected) 
+    {
       oldDeviceConnected = deviceConnected;
 
       digitalWrite(LED_PIN, HIGH); // Turn on LED to indicate connection
@@ -126,6 +129,10 @@ void parseADSDataTask(void * pvParameters)
 
         if (BANDPASS_EN && !TEST_DATA_EN)
         {
+          // Exponential Moving Average filter to remove fluctuating DC offset
+          convertedData = ema.Run(convertedData);
+
+          // applying biquad filters
           convertedData = biquad_hp_filter[i](convertedData); // applying highpass filter
           convertedData = biquad_lp_filter[i](convertedData); // applying lowpass filter
         }
@@ -196,12 +203,12 @@ void handleFeatureExtractionTask(void * pvParameters)
     }
 
     // verifying windows
-    for (int i = 0; i < WINDOW_SIZE; i++)
-    {
-      Serial.print(nextWindow[i].channelData[3]);
-      Serial.print(", ");
-      Serial.println(" ");
-    }
+    // for (int i = 0; i < WINDOW_SIZE; i++)
+    // {
+    //   Serial.print(nextWindow[i].channelData[3]);
+    //   Serial.print(", ");
+    //   Serial.println(" ");
+    // }
 
     memcpy(currentWindow, nextWindow, sizeof(EMGData)); // Copy next window to current window
     float features[N_FEATURES * 8] = {0};
@@ -209,22 +216,30 @@ void handleFeatureExtractionTask(void * pvParameters)
     
     // Adding data to buffer for classification
     xRingbufferSend(featureBuffer, &features, sizeof(float) * N_FEATURES, 0);
+
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
 void handleClassificationTask(void * pvParameters)
 {
-  Gesture predictedGesture = {0};
-  size_t itemSize;
-  float* features = (float *)xRingbufferReceive(featureBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-  if (features != NULL) 
-  {
-    predictedGesture = gc.runInterference(features);
-    vRingbufferReturnItem(featureBuffer, (void*)features); // Return the item to the buffer after processing
+  for (;;){
 
-    pGestureCharacteristic->setValue((uint8_t*)&predictedGesture, sizeof(predictedGesture)); // Set the characteristic value
-    if (deviceConnected) { pGestureCharacteristic->notify(); } // Notify connected clients
+    Gesture predictedGesture = {0};
+    size_t itemSize;
+    float* features = (float *)xRingbufferReceive(featureBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
+    if (features != NULL) 
+    {
+      predictedGesture = gc.runInterference(features);
+      vRingbufferReturnItem(featureBuffer, (void*)features); // Return the item to the buffer after processing
+
+      pGestureCharacteristic->setValue((uint8_t*)&predictedGesture, sizeof(predictedGesture)); // Set the characteristic value
+      if (deviceConnected) { pGestureCharacteristic->notify(); } // Notify connected clients
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+
   }
+  
 }
 
 
@@ -232,14 +247,12 @@ void readADSTask(void * pvParameters)
 {
   for (;;) 
   {
-    
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Wait until notified by the DRDY_ ISR
     // pdTRUE clears missed notifications rather than accumulating in a queue
 
     ADS.readChannelData();
     dataPacket* channelData = ADS.getAllChannelData(); // Get all channel data
     xRingbufferSend(bleDataBufferRaw, channelData, sizeof(dataPacket), 0); // Send data to buffer
-
   }
 }
 
@@ -248,11 +261,13 @@ void IRAM_ATTR DRDY__ISR()
   // Serial.println(millis());
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-  if (handleReadADS != NULL) {
+  if (handleReadADS != NULL) 
+  {
     vTaskNotifyGiveFromISR(handleReadADS, &xHigherPriorityTaskWoken); // Notify the task that data is ready
   }
 
-  if (xHigherPriorityTaskWoken) {
+  if (xHigherPriorityTaskWoken) 
+  {
     portYIELD_FROM_ISR(); // go to readADS task
   }
 
@@ -266,17 +281,22 @@ void setup()
 
   // -------------------- Initialising filters -------------------- //
 
-  if (!TEST_DATA_EN){
-    if (NOTCH_EN) {
+  if (!TEST_DATA_EN)
+  {
+    if (NOTCH_EN) 
+    {
       // Initialising a notch filter for each channel with calculated coefficients
-      for (int i = 0; i < 8; i++){
+      for (int i = 0; i < 8; i++)
+      {
         biquad_notch_filter[i] = BiQuadFilterDF1<float>({n_b0, n_b1, n_b2}, {n_a0, n_a1, n_a2});
       }
     }
     
-    if (BANDPASS_EN) {
+    if (BANDPASS_EN) 
+    {
       // initialising high pass and low pass filters with calculated coefficients
-      for (int i = 0; i < 8; i++){
+      for (int i = 0; i < 8; i++)
+      {
         biquad_hp_filter[i] = BiQuadFilterDF1<float>({h_b0, h_b1, h_b2}, {h_a0, h_a1, h_a2});
         biquad_lp_filter[i] = BiQuadFilterDF1<float>({l_b0, l_b1, l_b2}, {l_a0, l_a1, l_a2});
       }
@@ -287,28 +307,32 @@ void setup()
 
   bleDataBuffer = xRingbufferCreate(BLE_BUFFER_SIZE * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
 
-  if (bleDataBuffer == NULL) {
+  if (bleDataBuffer == NULL) 
+  {
     Serial.println("Failed to create ring buffer - bleDataBuffer");
     while (true); // Stop execution if buffer creation fails
   }
 
   bleDataBufferRaw = xRingbufferCreate(INPUT_DATA_BUFFER * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT); // FreeRTOS ring buffer for BLE data
 
-  if (bleDataBufferRaw == NULL) {
+  if (bleDataBufferRaw == NULL) 
+  {
     Serial.println("Failed to create ring buffer - bleDataBufferRaw");
     while (true); // Stop execution if buffer creation fails
   }
 
   processingBuffer = xRingbufferCreate(WINDOW_SIZE * 5 * sizeof(EMGData), RINGBUF_TYPE_NOSPLIT);
 
-  if (bleDataBufferRaw == NULL) {
+  if (bleDataBufferRaw == NULL) 
+  {
     Serial.println("Failed to create ring buffer - bleDataBufferRaw");
     while (true); // Stop execution if buffer creation fails
   }
 
   featureBuffer = xRingbufferCreate(N_FEATURES * 8 * 5 * sizeof(float), RINGBUF_TYPE_NOSPLIT);
 
-  if (bleDataBufferRaw == NULL) {
+  if (bleDataBufferRaw == NULL) 
+  {
     Serial.println("Failed to create ring buffer - bleDataBufferRaw");
     while (true); // Stop execution if buffer creation fails
   }
@@ -387,16 +411,19 @@ void setup()
   delay(10);
   ADS.startContinuousConversion(); // start reading data continuously
 
+  // -------------------- AIfES Setup -------------------- //
+  gc.initialise();
+
   // -------------------- RTOS Tasks Setup -------------------- //
 
   attachInterrupt(DRDY_, DRDY__ISR, FALLING); // Attach interrupt to DRDY_ pin
 
-  xTaskCreatePinnedToCore(parseADSDataTask, "ParseADS", 10000, NULL, 1, &handleParseADS, 0);
-  xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 10000, NULL, 2, &handleBLE, 0);
-  xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 10000, NULL, 2, &handleTransmit, 0);
-  xTaskCreatePinnedToCore(readADSTask, "ReadADS", 10000, NULL, 1, &handleReadADS, 1);
-  xTaskCreatePinnedToCore(handleFeatureExtractionTask, "FeatureExtraction", 10000, NULL, 1, &handleFeature, 0);
-  xTaskCreatePinnedToCore(handleClassificationTask, "Classify", 10000, NULL, 2, &handleInterference, 0);
+  xTaskCreatePinnedToCore(parseADSDataTask, "ParseADS", 5000, NULL, 1, &handleParseADS, 0);
+  xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 5000, NULL, 2, &handleBLE, 0);
+  xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 5000, NULL, 2, &handleTransmit, 0);
+  xTaskCreatePinnedToCore(readADSTask, "ReadADS", 5000, NULL, 1, &handleReadADS, 1);
+  //xTaskCreatePinnedToCore(handleFeatureExtractionTask, "FeatureExtraction", 10000, NULL, 1, &handleFeature, 0);
+  //xTaskCreatePinnedToCore(handleClassificationTask, "Classify", 10000, NULL, 2, &handleInterference, 0);
 
 }
 

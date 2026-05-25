@@ -13,6 +13,8 @@
 #define DATA_CHARACTERISTIC_UUID    "89fea506-0482-4895-b474-843229dae557"
 #define GESTURE_CHARACTERISTIC_UUID "9122613f-3d96-4ba2-9bb5-382cbda24f02"
 
+#define EMA_ALPHA 0.5
+
 // 50 Hz notch, Q = 30
 const float n_b0 = 0.98478425f;
 const float n_b1 = -1.87317095f;
@@ -22,20 +24,20 @@ const float n_a1 = -1.87317095f;
 const float n_a2 = 0.96956849f;
 
 // high pass 499 Hz cutoff, Q = 10
-const float h_b0 = 0.98985427f;
-const float h_b1 = -1.97970854f;
-const float h_b2 = 0.98985427f;
+const float h_b0 = 0.91495789f;
+const float h_b1 = -1.82991579f;
+const float h_b2 = 0.91495789f;
 const float h_a0 = 1.0f; // normalised
-const float h_a1 = -1.97187235f;
-const float h_a2 = 0.98754473f;
+const float h_a1 = -1.82267251f;
+const float h_a2 = 0.83715906f;
 
 // low pass 20 Hz cutoff, Q = 10
-const float l_b0 = 0.99967607f;
-const float l_b1 = -1.99935215f;
-const float l_b2 = 0.99967607f;
+const float l_b0 = 0.99556631f;
+const float l_b1 = 1.99113261f;
+const float l_b2 = 0.99556631f;
 const float l_a0 = 1.0f; // normalised
-const float l_a1 = -1.99933242f;
-const float l_a2 = 0.99937188f;
+const float l_a1 = 1.99111296f;
+const float l_a2 = 0.99115227f;
 
 struct EMGData {
   uint32_t timestamp; // Timestamp in milliseconds
@@ -51,6 +53,22 @@ struct TransmitData {
 struct Gesture {
   int gesture;
   float probability;
+};
+
+class EmaFilter
+{
+  public:
+      EmaFilter(double alpha) :
+          m_alpha(alpha), m_lastOutput(0.0) {}
+
+      double Run(double input)
+      {
+          m_lastOutput = m_alpha * input + (1 - m_alpha) * m_lastOutput;
+          return m_lastOutput;
+      }
+  private:
+      double m_alpha;
+      double m_lastOutput;
 };
 
 
