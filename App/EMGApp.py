@@ -33,7 +33,7 @@ sample_index = 1
 
 # Config variables
 logging = True
-filtering = True
+filtering = False
 connect = True
 
 gestures = ("Rest", 
@@ -49,7 +49,7 @@ if (logging):
     log_file_path = log_dir / (str(datetime.now().strftime("%Y-%m-%d_%H-%M-%S")) + "_emg_log.txt")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = open(log_file_path, "w")
-    log_file.write("%Raw EMG data\n %Sample Rate = " + str(sampling_frequency) + "Hz\n")
+    log_file.write("%Raw EMG data\n%Number of channels = 8\n%Sample Rate = " + str(sampling_frequency) + "Hz\n%Board = ESP32\n")
     # headers matching Cyton board format for compatibility with existing processing pipelines, even though not all channels are used
     log_file.write("Sample Index, EXG Channel 0, EXG Channel 1, EXG Channel 2, EXG Channel 3, EXG Channel 4, EXG Channel 5, EXG Channel 6, EXG Channel 7, Accel Channel 0, Accel Channel 1, Accel Channel 2, Not Used, Digital Channel 0 (D11), Digital Channel 1 (D12), Digital Channel 2 (D13), Digital Channel 3 (D17), Not Used, Digital Channel 4 (D18), Analog Channel 0, Analog Channel 1, Analog Channel 2, Timestamp, Marker Channel, Timestamp (Formatted)\n")
     print(f"Logging enabled, writing to {log_file_path}")
@@ -90,7 +90,7 @@ async def process_gestures(queue):
             format_string = '<' + 'if'
             unpacked_data = struct.unpack(format_string, data)
             current_gesture = unpacked_data[0]
-            current_probability = unpacked_data[1]
+            current_probability = unpacked_data[1] * 100
             fig.suptitle(f"{gestures[current_gesture]} - {current_probability}%", fontsize=16, fontweight="bold")
 
         except Exception as e:
