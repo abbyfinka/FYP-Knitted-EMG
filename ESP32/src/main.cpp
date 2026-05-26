@@ -11,7 +11,7 @@
 #include "ADS119X.h"
 #include "Filters.h"
 #include <Filters/BiQuad.hpp>
-#include <AH/Filters/EMA.hpp>
+#include "EMAFilter.h"
 #include <aifes.h>
 
 #define TEST_DATA_EN            0       // Flag to control sending test data instead of real ADS119X data
@@ -44,10 +44,13 @@ float input[N_FEATURES];
 BiQuadFilterDF1<float> biquad_notch_filter[8];
 BiQuadFilterDF1<float> biquad_hp_filter[8];
 BiQuadFilterDF1<float> biquad_lp_filter[8];
-EMA<EMA_K, float> ema[8];
+EMAFilter<float> ema[8];
 
 EMGData currentWindow[WINDOW_SIZE] = {0};
 EMGData nextWindow[WINDOW_SIZE] = {0};
+
+volatile bool txDataComplete = true;
+volatile bool txGestureComplete = true;
 
 // Pin definitions
 #define CS_           10     // chip select pin
@@ -73,6 +76,30 @@ class MyServerCallbacks:
       }
 
   };
+
+class DataCharacteristicCallbacks : public BLECharacteristicCallbacks {
+  void onStatus(BLECharacteristic* pCharacteristic, Status s, uint32_t code) {
+      if (s == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) {
+          txDataComplete = true;
+      } 
+      else if (s == BLECharacteristicCallbacks::Status::ERROR_GATT) {
+          txDataComplete = true; 
+      }
+  }
+};
+
+class GestureCharacteristicCallbacks : public BLECharacteristicCallbacks {
+  void onStatus(BLECharacteristic* pCharacteristic, Status s, uint32_t code) {
+      if (s == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) {
+          txGestureComplete = true;
+      } 
+      else if (s == BLECharacteristicCallbacks::Status::ERROR_GATT) {
+          txGestureComplete = true; 
+      }
+  }
+};
+
+
 
 
 ADS119X ADS(DRDY_, RESET_, CS_); // Initialise ADS119X
@@ -118,6 +145,7 @@ void parseADSDataTask(void * pvParameters)
         int index = i * 2;
         
         int16_t rawData = ((int16_t)(data1->channelData[index] << 8) | (int16_t)data1->channelData[index + 1]); // combining two 8 bit values from ADC into 16 bit value for each channel
+        
         float convertedData = rawData * (2.4f / 32767.0f) * 1000.0f; // scaled ADC values to mV
         
         // real time filtering
@@ -161,7 +189,6 @@ void handleTransmitTask(void * pvParameters)
 {
   for (;;) 
   {
- 
     TransmitData dataToSend = {0};
     for (int i = 0; i < N_PACKETS; i++) 
     {
@@ -172,6 +199,11 @@ void handleTransmitTask(void * pvParameters)
         memcpy(&dataToSend.dataToSend[i], data, sizeof(EMGData)); // Copy data to the TransmitData struct
         vRingbufferReturnItem(bleDataBuffer, (void*)data); // Return the item to the buffer after processing
       }
+    }
+
+    while (!txDataComplete){
+      Serial.println("waiting");
+      vTaskDelay(1);
     }
 
     pDataCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
@@ -297,7 +329,7 @@ void setup()
       // initialising high pass and low pass filters with calculated coefficients
       for (int i = 0; i < 8; i++)
       {
-        ema[i] = EMA<EMA_K, float>();
+        ema[i].begin(EMA_ALPHA);
         biquad_hp_filter[i] = BiQuadFilterDF1<float>({h_b0, h_b1, h_b2}, {h_a0, h_a1, h_a2});
         biquad_lp_filter[i] = BiQuadFilterDF1<float>({l_b0, l_b1, l_b2}, {l_a0, l_a1, l_a2});
       }
@@ -343,7 +375,7 @@ void setup()
 
   Serial.println("Starting BLE setup...");
   BLEDevice::init("EMG-Logger");
-  // BLEDevice::setMTU(517); // allowing to send bigger data packets
+  BLEDevice::setMTU(517); // allowing to send bigger data packets
   pServer = BLEDevice::createServer();  
   pServer->setCallbacks(new MyServerCallbacks());
 
@@ -358,6 +390,7 @@ void setup()
                                                         BLECharacteristic::PROPERTY_INDICATE);
   pDataCharacteristic->addDescriptor(new BLE2902());
   pDataCharacteristic->setValue("Initial value");
+  pDataCharacteristic->setCallbacks(new DataCharacteristicCallbacks());
   
   // Initialise characteristic that holds most recent gesture
   pGestureCharacteristic = pService->createCharacteristic(GESTURE_CHARACTERISTIC_UUID,

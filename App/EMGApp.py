@@ -21,6 +21,7 @@ SERVICE_UUID = "cde33313-b7aa-4b32-b29f-9043b1d8e042"
 DATA_CHARACTERISTIC_UUID = "89fea506-0482-4895-b474-843229dae557"
 GESTURE_CHARACTERISTIC_UUID = "9122613f-3d96-4ba2-9bb5-382cbda24f02"
 TARGET_DEVICE_NAME = "EMG-Logger"
+PACKET_SIZE = 15
 
 # -------------------- Display settings -------------------- #
 PRINT_INTERVAL = 0.512
@@ -28,7 +29,7 @@ sampling_frequency = 1000
 data_buffer_len = sampling_frequency * 2
 time_step = 1 / sampling_frequency
 ylim = 5
-ylim_freq = 100
+ylim_freq = 50
 sample_index = 1
 
 # Config variables
