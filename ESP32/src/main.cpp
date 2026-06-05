@@ -7,16 +7,16 @@
 #include <BLE2902.h>
 #include "freertos/ringbuf.h" // change to stream buffer?
 #include "main.h"
-#include "GestureClassifier.h"
+#include "Classifier.h"
 #include "ADS119X.h"
-#include "Filters.h"
 #include <Filters/BiQuad.hpp>
-#include "EMAFilter.h"
+#include "EMA.h"
 #include <aifes.h>
 
 #define TEST_DATA_EN            0       // Flag to control sending test data instead of real ADS119X data
 #define NOTCH_EN                1       // Flag to control whether to apply the notch filter
 #define BANDPASS_EN             1       // Flag to control whether to apply bandpass filter
+#define CLASSIFY                1
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pDataCharacteristic = NULL;
@@ -37,6 +37,7 @@ RingbufHandle_t bleDataBufferRaw;     // buffer for raw ADS1198 data
 RingbufHandle_t bleDataBuffer;        // buffer for data that needs to be sent over BLE
 RingbufHandle_t processingBuffer;     // buffer for data to be classified
 RingbufHandle_t featureBuffer;        // buffer of feature vectors
+RingbufHandle_t votingBuffer;         // buffer to implement majority voting
 
 float input[N_FEATURES];
 
@@ -44,15 +45,12 @@ float input[N_FEATURES];
 BiQuadFilterDF1<float> biquad_notch_filter[8];
 BiQuadFilterDF1<float> biquad_hp_filter[8];
 BiQuadFilterDF1<float> biquad_lp_filter[8];
-EMAFilter<float> ema[8];
+EMA<float> ema[8];
 
 EMGData currentWindow[WINDOW_SIZE] = {0};
 EMGData nextWindow[WINDOW_SIZE] = {0};
 
-volatile bool txDataComplete = true;
-volatile bool txGestureComplete = true;
-
-// Pin definitions
+// Pin definitions TESTPCB
 #define CS_           10     // chip select pin
 #define DRDY_         9      // data ready pin
 #define RESET_        46     // reset pin
@@ -60,6 +58,11 @@ volatile bool txGestureComplete = true;
 #define START         8      // start pin
 #define SDN_          18     // shutdown pin
 #define LED_PIN       15     // LED pin for debugging
+
+// Pin definitions FINALPCB
+// #define DRDY_         9      // data ready pin
+// #define RESET_        8     // reset pin
+// #define LED_PIN       15     // LED pin for debugging
 
 class MyServerCallbacks:
 
@@ -77,33 +80,8 @@ class MyServerCallbacks:
 
   };
 
-class DataCharacteristicCallbacks : public BLECharacteristicCallbacks {
-  void onStatus(BLECharacteristic* pCharacteristic, Status s, uint32_t code) {
-      if (s == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) {
-          txDataComplete = true;
-      } 
-      else if (s == BLECharacteristicCallbacks::Status::ERROR_GATT) {
-          txDataComplete = true; 
-      }
-  }
-};
-
-class GestureCharacteristicCallbacks : public BLECharacteristicCallbacks {
-  void onStatus(BLECharacteristic* pCharacteristic, Status s, uint32_t code) {
-      if (s == BLECharacteristicCallbacks::Status::SUCCESS_NOTIFY) {
-          txGestureComplete = true;
-      } 
-      else if (s == BLECharacteristicCallbacks::Status::ERROR_GATT) {
-          txGestureComplete = true; 
-      }
-  }
-};
-
-
-
-
-ADS119X ADS(DRDY_, RESET_, CS_); // Initialise ADS119X
-GestureClassifier gc; // Initialise classifier
+ADS119X ADS(DRDY_, RESET_); // Initialise ADS119X
+Classifier gc; // Initialise classifier
 
 void handleBLETask(void * pvParameters) 
 {
@@ -137,7 +115,7 @@ void parseADSDataTask(void * pvParameters)
     EMGData emg = {0};
     size_t itemSize;
     dataPacket* data1 = (dataPacket*)xRingbufferReceive(bleDataBufferRaw, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
-    float channelData[8] = {0};
+    int16_t channelData[8] = {0};
     if (data1 != NULL) 
     {
       for (int i = 0; i < 8; i++) 
@@ -165,11 +143,12 @@ void parseADSDataTask(void * pvParameters)
           convertedData = biquad_lp_filter[i](convertedData); // applying lowpass filter
         }
         
-        channelData[i] = convertedData;
+        channelData[i] = (int16_t)(convertedData * 1000);
       }
 
       // Creating instance of EMGData from next set of data
-      emg.timestamp = data1->timestamp;
+      // emg.timestamp = data1->timestamp;
+      // emg.timestamp = 0;
       memcpy(&emg.channelData, channelData, sizeof(channelData));
 
       // Add data to buffer for BLE transfer
@@ -201,13 +180,8 @@ void handleTransmitTask(void * pvParameters)
       }
     }
 
-    while (!txDataComplete){
-      Serial.println("waiting");
-      vTaskDelay(1);
-    }
-
     pDataCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
-    if (deviceConnected) { pDataCharacteristic->notify(); } // Notify connected clients
+    if (deviceConnected && !CLASSIFY) { pDataCharacteristic->notify(); } // Notify connected clients
 
   }
 }
@@ -257,21 +231,25 @@ void handleClassificationTask(void * pvParameters)
 {
   for (;;){
 
-    Gesture predictedGesture = {0};
+    InterferenceOutput classification = {0};
     size_t itemSize;
     float* features = (float *)xRingbufferReceive(featureBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
     if (features != NULL) 
     {
-      predictedGesture = gc.runInterference(features);
+      classification = gc.runInterference(features);
       vRingbufferReturnItem(featureBuffer, (void*)features); // Return the item to the buffer after processing
 
-      pGestureCharacteristic->setValue((uint8_t*)&predictedGesture, sizeof(predictedGesture)); // Set the characteristic value
+      if (classification.probability > 50){
+        xRingbufferSend(votingBuffer, &classification.pose, sizeof(int8_t), 0);
+      }
+      // Serial.println(classification.pose);
+      // Serial.println(classification.probability);
+      pGestureCharacteristic->setValue((uint8_t*)&classification, sizeof(classification)); // Set the characteristic value
       if (deviceConnected) { pGestureCharacteristic->notify(); } // Notify connected clients
     }
     vTaskDelay(pdMS_TO_TICKS(10));
 
   }
-  
 }
 
 
@@ -320,7 +298,7 @@ void setup()
       // Initialising a notch filter for each channel with calculated coefficients
       for (int i = 0; i < 8; i++)
       {
-        biquad_notch_filter[i] = BiQuadFilterDF1<float>({n_b0, n_b1, n_b2}, {n_a0, n_a1, n_a2});
+        biquad_notch_filter[i] = BiQuadFilterDF1<float>({NB0, NB1, NB2}, {NA0, NA1, NA2});
       }
     }
     
@@ -330,8 +308,8 @@ void setup()
       for (int i = 0; i < 8; i++)
       {
         ema[i].begin(EMA_ALPHA);
-        biquad_hp_filter[i] = BiQuadFilterDF1<float>({h_b0, h_b1, h_b2}, {h_a0, h_a1, h_a2});
-        biquad_lp_filter[i] = BiQuadFilterDF1<float>({l_b0, l_b1, l_b2}, {l_a0, l_a1, l_a2});
+        biquad_hp_filter[i] = BiQuadFilterDF1<float>({HB0, HB1, HB2}, {HA0, HA1, HA2});
+        biquad_lp_filter[i] = BiQuadFilterDF1<float>({LB0, LB1, LB2}, {LA0, LA1, LA2});
       }
       
     }
@@ -371,6 +349,14 @@ void setup()
     while (true); // Stop execution if buffer creation fails
   }
 
+  votingBuffer = xRingbufferCreate(5 * sizeof(int8_t), RINGBUF_TYPE_NOSPLIT);
+
+  if (votingBuffer == NULL)
+  {
+    Serial.println("Failed to create ring buffer - votingBuffer");
+    while (true);
+  }
+
   // -------------------- BLE setup -------------------- //
 
   Serial.println("Starting BLE setup...");
@@ -390,7 +376,6 @@ void setup()
                                                         BLECharacteristic::PROPERTY_INDICATE);
   pDataCharacteristic->addDescriptor(new BLE2902());
   pDataCharacteristic->setValue("Initial value");
-  pDataCharacteristic->setCallbacks(new DataCharacteristicCallbacks());
   
   // Initialise characteristic that holds most recent gesture
   pGestureCharacteristic = pService->createCharacteristic(GESTURE_CHARACTERISTIC_UUID,
@@ -411,16 +396,19 @@ void setup()
 
   // -------------------- Pin Setup -------------------- //
 
-  // set device pins high to keep devices active (tie high in final design)
+  // required pin setup for TESTPCB
   pinMode(PWDN_, OUTPUT);
   pinMode(START, OUTPUT);
   pinMode(SDN_, OUTPUT);
+  pinMode(CS_, OUTPUT);
   digitalWrite(PWDN_, HIGH);
   digitalWrite(START, HIGH);
   digitalWrite(SDN_, HIGH);
+  digitalWrite(CS_, LOW);
   
-  pinMode(17, OUTPUT);
-  digitalWrite(17, HIGH);
+  // required pin setup for breadboard testing
+  // pinMode(17, OUTPUT);
+  // digitalWrite(17, HIGH);
 
   // LED on Test Board
   pinMode(LED_PIN, OUTPUT);
@@ -438,8 +426,8 @@ void setup()
   ADS.setDataRate(ADS119X_DRATE_1000SPS);
   ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
   if (!TEST_DATA_EN) {
-    // ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_12); // setting gain to 12 for all channels
-    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_6);
+    ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_12); // setting gain to 12 for all channels
+    // ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_6);
     ADS.setAllChannelMux(ADS119X_CHnSET_MUX_NORMAL); 
     ADS.enableRLD();
   }
@@ -457,8 +445,11 @@ void setup()
   xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 5000, NULL, 2, &handleBLE, 0);
   xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 5000, NULL, 2, &handleTransmit, 0);
   xTaskCreatePinnedToCore(readADSTask, "ReadADS", 5000, NULL, 1, &handleReadADS, 1);
-  //xTaskCreatePinnedToCore(handleFeatureExtractionTask, "FeatureExtraction", 10000, NULL, 1, &handleFeature, 0);
-  //xTaskCreatePinnedToCore(handleClassificationTask, "Classify", 10000, NULL, 2, &handleInterference, 0);
+  if (CLASSIFY){
+    xTaskCreatePinnedToCore(handleFeatureExtractionTask, "FeatureExtraction", 10000, NULL, 1, &handleFeature, 0);
+    xTaskCreatePinnedToCore(handleClassificationTask, "Classify", 10000, NULL, 2, &handleInterference, 0);
+  }
+  
 
 }
 

@@ -187,7 +187,7 @@ struct dataPacket {
 
 class ADS119X {
  public:
-  ADS119X(byte dataReady_Pin, byte reset_Pin, byte cs_Pin);  
+  ADS119X(byte dataReady_Pin, byte reset_Pin);  
   boolean begin();    
 
   void sendCommand(unsigned char cmd);
@@ -235,14 +235,11 @@ class ADS119X {
 
  private:
   byte xfer(byte _data); 
-  void csLow();
-  void csHigh();
   void getNumberOfChannelsFromReg ();
   
   // pins 
   byte _drdy_pin;
   byte _reset_pin;
-  byte _cs_pin ; 
   byte _start_pin;
     
   //-------- Lib Copy of Regs and Settings 

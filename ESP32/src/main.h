@@ -4,8 +4,8 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-#define N_PACKETS               10
-#define BLE_BUFFER_SIZE         20      // Buffer size for transmission over BLE
+#define N_PACKETS               15
+#define BLE_BUFFER_SIZE         30      // Buffer size for transmission over BLE
 #define INPUT_DATA_BUFFER       20      // Buffer size input from the ADS1198
 
 // UUIDs for BLE service and characteristic
@@ -16,40 +16,31 @@
 #define EMA_ALPHA 0.5
 
 // 50 Hz notch, Q = 30
-const float n_b0 = 0.98478425f;
-const float n_b1 = -1.87317095f;
-const float n_b2 = 0.98478425f;
-const float n_a0 = 1.0f; // normalised
-const float n_a1 = -1.87317095f;
-const float n_a2 = 0.96956849f;
-
-// const float n_b0 = 0.92828597f;
-// const float n_b1 = -1.76570483f;
-// const float n_b2 = 0.92828597f;
-// const float n_a0 = 1.0f; // normalised
-// const float n_a1 = -1.76570483f;
-// const float n_a2 = 0.85657193f;
+#define NB0     0.98478425f
+#define NB1     -1.87317095f
+#define NB2     0.98478425f
+#define NA0     1.0f // normalised
+#define NA1     -1.87317095f
+#define NA2     0.96956849f
 
 // high pass 499 Hz cutoff, Q = 10
-const float h_b0 = 0.91495789f;
-const float h_b1 = -1.82991579f;
-const float h_b2 = 0.91495789f;
-const float h_a0 = 1.0f; // normalised
-const float h_a1 = -1.82267251f;
-const float h_a2 = 0.83715906f;
+#define HB0     0.91495789f
+#define HB1     -1.82991579f
+#define HB2     0.91495789f
+#define HA0     1.0f // normalised
+#define HA1     -1.82267251f
+#define HA2     0.83715906f
 
 // low pass 20 Hz cutoff, Q = 10
-const float l_b0 = 0.99556631f;
-const float l_b1 = 1.99113261f;
-const float l_b2 = 0.99556631f;
-const float l_a0 = 1.0f; // normalised
-const float l_a1 = 1.99111296f;
-const float l_a2 = 0.99115227f;
+#define LB0    0.99556631f
+#define LB1    1.99113261f
+#define LB2    0.99556631f
+#define LA0    1.0f // normalised
+#define LA1    1.99111296f
+#define LA2    0.99115227f
 
 struct EMGData {
-  uint32_t timestamp; // Timestamp in milliseconds
-  float channelData[8]; // Data for 8 channels
-
+  int16_t channelData[8]; // Data for 8 channels
 };
 
 // package EMGData structs together for more efficient BLE transmission
@@ -57,9 +48,9 @@ struct TransmitData {
   EMGData dataToSend[N_PACKETS];
 };
 
-struct Gesture {
-  int gesture;
-  float probability;
+struct InterferenceOutput {
+  int8_t pose;
+  int16_t probability;
 };
 
 #endif // MAIN_H

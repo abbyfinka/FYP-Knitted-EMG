@@ -3,19 +3,16 @@
 #include "SPI.h"
 #include "main.h"
 
-ADS119X::ADS119X(byte dataReady_Pin, byte reset_Pin, byte cs_Pin)
+ADS119X::ADS119X(byte dataReady_Pin, byte reset_Pin)
 {
   // pins 
   _drdy_pin = dataReady_Pin;
   _reset_pin = reset_Pin;
-  _cs_pin = cs_Pin; 
   
   // Set DRDY as input
   pinMode(_drdy_pin, INPUT);      // using arduino functions for more compatibility
   // set RESETPIN as output
   pinMode(_reset_pin, OUTPUT );
-  // Set CS as output
-  pinMode(_cs_pin, OUTPUT);
   
   // Start SPI
   SPI.begin(12, 13, 11, 10); // SCK, MISO, MOSI, SS
@@ -68,22 +65,18 @@ void ADS119X::startContinuousConversion() {
 }
 
 void ADS119X::sendCommand(byte _command) 
-{
-  csLow();    
+{ 
   xfer(_command);
-  csHigh();  
 
 }
 
 
 void ADS119X::WREG(byte address, byte value)
 {                                             //  Write ONE register at _address
-  byte opcode1 = address + ADS119X_CMD_WREG; //  WREG expects 010rrrrr where rrrrr = _address
-  csLow();                        //  open SPI
+  byte opcode1 = address + ADS119X_CMD_WREG; //  WREG expects 010rrrrr where rrrrr = _address                      //  open SPI
   xfer(opcode1);                  //  Send WREG command & address
   xfer(0x00);                     //  opcode2, Send number of registers to write -1
   xfer(value);                    //  Write the value to the register
-  csHigh();                       //  close SPI
   _regData[address] = value;       //  update the mirror array
 }
 
@@ -91,11 +84,9 @@ void ADS119X::WREG(byte address, byte value)
 byte ADS119X::RREG(byte  address)
 {                                               //  reads ONE register at _address
   byte opcode1 =  address + ADS119X_CMD_RREG;   //  RREG expects 001r rrrr where rrrrr = _address
-  csLow();                                      //  open SPI
   xfer(opcode1);                                //  opcode1
   xfer(0x00);                                   //  opcode2, Send number of registers to read -1
   _regData[ address] = xfer(0x00);               //  update mirror location with returned byte
-  csHigh();                                     //  close SPI
 
   return _regData[ address]; // return requested register value
 }
@@ -105,14 +96,12 @@ byte ADS119X::RREG(byte  address)
 void ADS119X::RREGS(byte  address, byte  numRegistersMinusOne)
 {
   byte opcode1 =  address + 0x20; //  RREG expects 001rrrrr where rrrrr = _address
-  csLow();                        //  open SPI
   xfer(opcode1);                  //  opcode1
   xfer( numRegistersMinusOne);    //  opcode2
   for (int i = 0; i <=  numRegistersMinusOne; i++)
   {
     _regData[ address + i] = xfer(0x00); //  save register byte to mirror array
   }
-  csHigh(); //  close SPI
 }
 
 
@@ -131,13 +120,10 @@ void ADS119X::setDataRate(byte dataRate)
 
 void ADS119X::readChannelData()
 {
-  _lastreadtime = micros();
-  //Serial.println(_lastreadtime);
+  _lastreadtime = millis();
   // Read status 24 bits
-  csLow(); //  open SPI
   SPI.transferBytes(NULL, _statusReg, 3); // read 24 bit status register (1100 + LOFF_STATP + LOFF_STATN + GPIO[7:4])
   SPI.transferBytes(NULL, _channelData, 16); // read all channel data
-  csHigh(); // close SPI
   
   lastOutput.timestamp = _lastreadtime;
   memcpy(lastOutput.channelData, _channelData, 16);
@@ -173,14 +159,6 @@ void ADS119X::setAllChannelMux(byte muxSetting )
  } 
    
 }
-
-#define ADS119X_CHnSET_GAIN_6         0x00
-#define ADS119X_CHnSET_GAIN_1         0x10
-#define ADS119X_CHnSET_GAIN_2         0x20
-#define ADS119X_CHnSET_GAIN_3         0x30
-#define ADS119X_CHnSET_GAIN_4         0x40
-#define ADS119X_CHnSET_GAIN_8         0x50
-#define ADS119X_CHnSET_GAIN_12        0x60
 
 
 void ADS119X::setAllChannelGain(byte gainSetting )
@@ -335,15 +313,13 @@ void  ADS119X::setDefaultSettings() {
   sendCommand (ADS119X_CMD_SDATAC);
   
   byte opcode1 = 0x40;            //  WREG expects 010rrrrr where rrrrr = _address
-  csLow();                        //  open SPI
   xfer(opcode1);                  //  Send WREG command & address
   xfer(ADS119X_REG_SIZE - 1 );    //  Send number of registers to write -1
   for (int i = 0; i <= ADS119X_REG_SIZE - 1 ; i++)
   {
     xfer(_regDataDefault[i]); //  Write to the registers
     _regData[i] = _regDataDefault [i];  // Update local mirror
-  }
-  csHigh();
+  }  
      
 }
 
@@ -360,17 +336,6 @@ byte ADS119X::xfer(byte _data)
   byte inByte;
   inByte = SPI.transfer(_data);
   return inByte;
-}
-
-//SPI chip select method
-void ADS119X::csLow()
-{ // select an SPI slave to talk to
-    digitalWrite(_cs_pin, LOW);
-}
-
-void ADS119X::csHigh()
-{ // deselect an SPI slave to talk to
-    //digitalWrite(_cs_pin, HIGH);
 }
 
 void ADS119X::getNumberOfChannelsFromReg ()
@@ -397,8 +362,8 @@ void ADS119X::enableRLD() {
   
   sendCommand (ADS119X_CMD_SDATAC);
   
-  WREG(ADS119X_RLDSENSEP, 0x04); 
-  WREG(ADS119X_RLDSENSEN, 0x04); 
+  WREG(ADS119X_RLDSENSEP, 0xFF); 
+  WREG(ADS119X_RLDSENSEN, 0xFF); 
   WREG(ADS119X_ADD_CONFIG3 , ADS119X_ENABLE_RLD);
   
   startContinuousConversion(); 

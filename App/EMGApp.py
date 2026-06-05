@@ -28,14 +28,18 @@ PRINT_INTERVAL = 0.512
 sampling_frequency = 1000
 data_buffer_len = sampling_frequency * 2
 time_step = 1 / sampling_frequency
-ylim = 5
-ylim_freq = 50
+ylim_time = 10
+ylim_freq = 200
 sample_index = 1
 
 # Config variables
-logging = True
-filtering = False
+logging = True # Change to False to disable logging data to a text file
+filtering = False # Change to True to enable real time bandpass filtering
+fc_lowpass = 499
+fc_highpass = 20
+
 connect = True
+maxRetry = 5
 
 gestures = ("Rest", 
             "Fist", 
@@ -60,39 +64,37 @@ if (logging):
 async def process_data(queue):
     global sample_index
     while True:
-        # print('processing data...')
         data = await queue.get() # get data from queue when available
-        # print(data)
         # processing data
         try: 
-            format_string = '<' + 'I8f' * 10
+            format_string = '<' + '8h' * PACKET_SIZE
             unpacked_data = struct.unpack(format_string, data)
     
-            for i in range(0, 10):
-                timestamp = unpacked_data[i * 9]
-                channels = unpacked_data[1 + i * 9: 9 + i * 9]
+            for i in range(0, PACKET_SIZE):
+                # timestamp = unpacked_data[i * 9]
+                timestamp = 0.01 * sample_index
+                channels = unpacked_data[i * 8: (1 + i) * 8]
                 # log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
                 log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
                 sample_index += 1
                 for n in range(0,8):
                     # append new values
-                    channel_data[n].append(channels[n])
+                    channel_data[n].append(channels[n] / 1000)
 
         except Exception as e:
             print("Error decoding data " + str(e))
 
         queue.task_done()
 
-async def process_gestures(queue):
+async def process_classifier(queue):
     while True:
         data = await queue.get()
-
         try:
-            format_string = '<' + 'if'
+            format_string = '<' + 'bxh'
             unpacked_data = struct.unpack(format_string, data)
-            current_gesture = unpacked_data[0]
-            current_probability = unpacked_data[1] * 100
-            fig.suptitle(f"{gestures[current_gesture]} - {current_probability}%", fontsize=16, fontweight="bold")
+            current_pose = unpacked_data[0]
+            current_probability = unpacked_data[1]
+            fig.suptitle(f"{gestures[current_pose]} - {current_probability}%", fontsize=16, fontweight="bold")
 
         except Exception as e:
             print("Error decoding data " + str(e))
@@ -115,6 +117,7 @@ async def ble_receive():
 
     # Start the background processing task when data is put in queue
     process_task = asyncio.create_task(process_data(data_queue))
+    process_classifier_task = asyncio.create_task(process_classifier(gesture_queue))
 
     print(f"Scanning for device named '{TARGET_DEVICE_NAME}'...")
     
@@ -150,6 +153,8 @@ async def ble_receive():
             print("Disconnected.")
 
 
+
+
 def run_ble_process():
     asyncio.run(ble_receive())
 
@@ -177,7 +182,7 @@ for i in range(8):
     ax_time = fig.add_subplot(gs[i, 0])
     time_plot, = ax_time.plot([], [], label=f"Channel {i+1}", linewidth=0.5)
     time_plots.append(time_plot)
-    ax_time.set_ylim(-ylim, ylim)
+    ax_time.set_ylim(-ylim_time, ylim_time)
     ax_time.set_xlim(0, data_buffer_len * time_step)
     ax_time.set_ylabel(f"Ch {i+1} / mV")
     time_axes.append(ax_time)
@@ -199,7 +204,7 @@ def animate(frame):
     for idx, line in enumerate(time_plots):
         y = list(channel_data[idx])
         if filtering and len(y) > 1:
-            sos_bandpass = signal.butter(8, [20, 499], 'bandpass', fs=sampling_frequency, output='sos')
+            sos_bandpass = signal.butter(8, [fc_highpass, fc_lowpass], 'bandpass', fs=sampling_frequency, output='sos')
             y = signal.sosfilt(sos_bandpass, y)
             
         x = list([s * time_step for s in range(len(y))])
@@ -215,7 +220,6 @@ def animate(frame):
             fft_values = np.abs(np.fft.rfft(y))
             line.set_data(freqs, fft_values)
 
-    # Return all three line objects so FuncAnimation knows what to redraw
     return time_plots + freq_plots
 
 ani = FuncAnimation(fig, animate, interval=50, blit=True)
