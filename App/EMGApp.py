@@ -73,7 +73,7 @@ async def process_data(queue):
             for i in range(0, PACKET_SIZE):
                 # timestamp = unpacked_data[i * 9]
                 timestamp = 0.01 * sample_index
-                channels = unpacked_data[i * 8: (1 + i) * 8]
+                channels = unpacked_data[i * 8: (1 + i) * 8] / 1000
                 # log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
                 log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
                 sample_index += 1
@@ -89,12 +89,12 @@ async def process_data(queue):
 async def process_classifier(queue):
     while True:
         data = await queue.get()
+        print(data)
         try:
-            format_string = '<' + 'bxh'
+            format_string = '<' + 'b'
             unpacked_data = struct.unpack(format_string, data)
             current_pose = unpacked_data[0]
-            current_probability = unpacked_data[1]
-            fig.suptitle(f"{gestures[current_pose]} - {current_probability}%", fontsize=16, fontweight="bold")
+            fig.suptitle(f"{gestures[current_pose]}", fontsize=16, fontweight="bold")
 
         except Exception as e:
             print("Error decoding data " + str(e))

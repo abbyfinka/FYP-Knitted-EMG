@@ -12,11 +12,15 @@
 #include <Filters/BiQuad.hpp>
 #include "EMA.h"
 #include <aifes.h>
+#include "VotingBuffer.h"
+#include "Types.h"
 
 #define TEST_DATA_EN            0       // Flag to control sending test data instead of real ADS119X data
 #define NOTCH_EN                1       // Flag to control whether to apply the notch filter
 #define BANDPASS_EN             1       // Flag to control whether to apply bandpass filter
-#define CLASSIFY                1
+#define CLASSIFY                1       // Flag to enable embedded classification
+
+#define CONFIDENCE_THRESHOLD    60
 
 BLEServer* pServer = NULL;
 BLECharacteristic* pDataCharacteristic = NULL;
@@ -41,6 +45,8 @@ RingbufHandle_t votingBuffer;         // buffer to implement majority voting
 
 float input[N_FEATURES];
 
+VotingBuffer<int8_t> vb;
+
 // initialising a filter for each channel
 BiQuadFilterDF1<float> biquad_notch_filter[8];
 BiQuadFilterDF1<float> biquad_hp_filter[8];
@@ -51,18 +57,18 @@ EMGData currentWindow[WINDOW_SIZE] = {0};
 EMGData nextWindow[WINDOW_SIZE] = {0};
 
 // Pin definitions TESTPCB
-#define CS_           10     // chip select pin
-#define DRDY_         9      // data ready pin
-#define RESET_        46     // reset pin
-#define PWDN_         3      // power down pin
-#define START         8      // start pin
-#define SDN_          18     // shutdown pin
-#define LED_PIN       15     // LED pin for debugging
+// #define CS_           10     // chip select pin
+// #define DRDY_         9      // data ready pin
+// #define RESET_        46     // reset pin
+// #define PWDN_         3      // power down pin
+// #define START         8      // start pin
+// #define SDN_          18     // shutdown pin
+// #define LED_PIN       15     // LED pin for debugging
 
 // Pin definitions FINALPCB
-// #define DRDY_         9      // data ready pin
-// #define RESET_        8     // reset pin
-// #define LED_PIN       15     // LED pin for debugging
+#define DRDY_         9      // data ready pin
+#define RESET_        8     // reset pin
+#define LED_PIN       15     // LED pin for debugging
 
 class MyServerCallbacks:
 
@@ -239,12 +245,16 @@ void handleClassificationTask(void * pvParameters)
       classification = gc.runInterference(features);
       vRingbufferReturnItem(featureBuffer, (void*)features); // Return the item to the buffer after processing
 
-      if (classification.probability > 50){
-        xRingbufferSend(votingBuffer, &classification.pose, sizeof(int8_t), 0);
+      if (classification.probability > CONFIDENCE_THRESHOLD){
+        vb.update(classification.pose);
       }
+      Serial.println(classification.probability);
+      
+      int8_t currentPose = vb.findMajority();
+      Serial.println(currentPose);
       // Serial.println(classification.pose);
       // Serial.println(classification.probability);
-      pGestureCharacteristic->setValue((uint8_t*)&classification, sizeof(classification)); // Set the characteristic value
+      pGestureCharacteristic->setValue((uint8_t*)&currentPose, sizeof(int8_t)); // Set the characteristic value
       if (deviceConnected) { pGestureCharacteristic->notify(); } // Notify connected clients
     }
     vTaskDelay(pdMS_TO_TICKS(10));
@@ -349,13 +359,7 @@ void setup()
     while (true); // Stop execution if buffer creation fails
   }
 
-  votingBuffer = xRingbufferCreate(5 * sizeof(int8_t), RINGBUF_TYPE_NOSPLIT);
-
-  if (votingBuffer == NULL)
-  {
-    Serial.println("Failed to create ring buffer - votingBuffer");
-    while (true);
-  }
+  vb.initialise(5);
 
   // -------------------- BLE setup -------------------- //
 
@@ -397,14 +401,14 @@ void setup()
   // -------------------- Pin Setup -------------------- //
 
   // required pin setup for TESTPCB
-  pinMode(PWDN_, OUTPUT);
-  pinMode(START, OUTPUT);
-  pinMode(SDN_, OUTPUT);
-  pinMode(CS_, OUTPUT);
-  digitalWrite(PWDN_, HIGH);
-  digitalWrite(START, HIGH);
-  digitalWrite(SDN_, HIGH);
-  digitalWrite(CS_, LOW);
+  // pinMode(PWDN_, OUTPUT);
+  // pinMode(START, OUTPUT);
+  // pinMode(SDN_, OUTPUT);
+  // pinMode(CS_, OUTPUT);
+  // digitalWrite(PWDN_, HIGH);
+  // digitalWrite(START, HIGH);
+  // digitalWrite(SDN_, HIGH);
+  // digitalWrite(CS_, LOW);
   
   // required pin setup for breadboard testing
   // pinMode(17, OUTPUT);

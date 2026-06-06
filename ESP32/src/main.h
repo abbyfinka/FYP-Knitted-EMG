@@ -2,7 +2,6 @@
 #define MAIN_H
 
 #include <Arduino.h>
-#include <SPI.h>
 
 #define N_PACKETS               15
 #define BLE_BUFFER_SIZE         30      // Buffer size for transmission over BLE
@@ -39,18 +38,6 @@
 #define LA1    1.99111296f
 #define LA2    0.99115227f
 
-struct EMGData {
-  int16_t channelData[8]; // Data for 8 channels
-};
 
-// package EMGData structs together for more efficient BLE transmission
-struct TransmitData {
-  EMGData dataToSend[N_PACKETS];
-};
-
-struct InterferenceOutput {
-  int8_t pose;
-  int16_t probability;
-};
 
 #endif // MAIN_H
