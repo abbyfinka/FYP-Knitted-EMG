@@ -79,7 +79,7 @@ async def process_data(queue):
                 sample_index += 1
                 for n in range(0,8):
                     # append new values
-                    channel_data[n].append(channels[n] / 1000)
+                    channel_data[n].append(channels[n])
 
         except Exception as e:
             print("Error decoding data " + str(e))
@@ -89,7 +89,7 @@ async def process_data(queue):
 async def process_classifier(queue):
     while True:
         data = await queue.get()
-        print(data)
+        # print(data)
         try:
             format_string = '<' + 'b'
             unpacked_data = struct.unpack(format_string, data)
