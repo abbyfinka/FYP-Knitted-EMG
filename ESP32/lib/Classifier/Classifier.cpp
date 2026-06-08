@@ -76,7 +76,7 @@ void Classifier::extractFeatures(EMGData frame[], float features[])
 
 }
 
-InterferenceOutput Classifier::runInterference(float* input_data)
+InterferenceOutput Classifier::runInference(float* input_data)
 {
     
     float output_data[(uint16_t)FNN_structure[FNN_LAYERS - 1]]; 

@@ -18,7 +18,7 @@
 #define TEST_DATA_EN            0       // Flag to control sending test data instead of real ADS119X data
 #define NOTCH_EN                1       // Flag to control whether to apply the notch filter
 #define BANDPASS_EN             1       // Flag to control whether to apply bandpass filter
-#define CLASSIFY                1       // Flag to enable embedded classification
+#define CLASSIFY                0       // Flag to enable embedded classification
 
 #define CONFIDENCE_THRESHOLD    60
 
@@ -48,7 +48,11 @@ float input[N_FEATURES];
 VotingBuffer<int8_t> vb;
 
 // initialising a filter for each channel
-BiQuadFilterDF1<float> biquad_notch_filter[8];
+BiQuadFilterDF1<float> biquad_notch_filter_50[8];
+BiQuadFilterDF1<float> biquad_notch_filter_100[8];
+BiQuadFilterDF1<float> biquad_notch_filter_150[8];
+BiQuadFilterDF1<float> biquad_notch_filter_200[8];
+BiQuadFilterDF1<float> biquad_notch_filter_250[8];
 BiQuadFilterDF1<float> biquad_hp_filter[8];
 BiQuadFilterDF1<float> biquad_lp_filter[8];
 EMA<float> ema[8];
@@ -57,18 +61,18 @@ EMGData currentWindow[WINDOW_SIZE] = {0};
 EMGData nextWindow[WINDOW_SIZE] = {0};
 
 // Pin definitions TESTPCB
-// #define CS_           10     // chip select pin
-// #define DRDY_         9      // data ready pin
-// #define RESET_        46     // reset pin
-// #define PWDN_         3      // power down pin
-// #define START         8      // start pin
-// #define SDN_          18     // shutdown pin
-// #define LED_PIN       15     // LED pin for debugging
+#define CS_           10     // chip select pin
+#define DRDY_         9      // data ready pin
+#define RESET_        46     // reset pin
+#define PWDN_         3      // power down pin
+#define START         8      // start pin
+#define SDN_          18     // shutdown pin
+#define LED_PIN       15     // LED pin for debugging
 
 // Pin definitions FINALPCB
-#define DRDY_         9      // data ready pin
-#define RESET_        8     // reset pin
-#define LED_PIN       15     // LED pin for debugging
+// #define DRDY_         9      // data ready pin
+// #define RESET_        8     // reset pin
+// #define LED_PIN       15     // LED pin for debugging
 
 class MyServerCallbacks:
 
@@ -136,7 +140,11 @@ void parseADSDataTask(void * pvParameters)
 
         if (NOTCH_EN && !TEST_DATA_EN) 
         {
-          convertedData = biquad_notch_filter[i](convertedData); // applying notch filter
+          convertedData = biquad_notch_filter_50[i](convertedData); // applying notch filter
+          convertedData = biquad_notch_filter_100[i](convertedData);
+          convertedData = biquad_notch_filter_150[i](convertedData);
+          convertedData = biquad_notch_filter_200[i](convertedData);
+          convertedData = biquad_notch_filter_250[i](convertedData);
         }
 
         if (BANDPASS_EN && !TEST_DATA_EN)
@@ -242,7 +250,7 @@ void handleClassificationTask(void * pvParameters)
     float* features = (float *)xRingbufferReceive(featureBuffer, &itemSize, portMAX_DELAY); // Wait for data to be available in the buffer
     if (features != NULL) 
     {
-      classification = gc.runInterference(features);
+      classification = gc.runInference(features);
       vRingbufferReturnItem(featureBuffer, (void*)features); // Return the item to the buffer after processing
 
       if (classification.probability > CONFIDENCE_THRESHOLD){
@@ -308,7 +316,12 @@ void setup()
       // Initialising a notch filter for each channel with calculated coefficients
       for (int i = 0; i < 8; i++)
       {
-        biquad_notch_filter[i] = BiQuadFilterDF1<float>({NB0, NB1, NB2}, {NA0, NA1, NA2});
+        biquad_notch_filter_50[i] = BiQuadFilterDF1<float>({NB0, NB1, NB2}, {NA0, NA1, NA2});
+        biquad_notch_filter_100[i] = BiQuadFilterDF1<float>({NB0_2, NB1_2, NB2_2}, {NA0_2, NA1_2, NA2_2});
+        biquad_notch_filter_150[i] = BiQuadFilterDF1<float>({NB0_3, NB1_3, NB2_3}, {NA0_3, NA1_3, NA2_3});
+        biquad_notch_filter_200[i] = BiQuadFilterDF1<float>({NB0_4, NB1_4, NB2_4}, {NA0_4, NA1_4, NA2_4});
+        biquad_notch_filter_250[i] = BiQuadFilterDF1<float>({NB0_5, NB1_5, NB2_5}, {NA0_5, NA1_5, NA2_5});
+
       }
     }
     
@@ -400,15 +413,15 @@ void setup()
 
   // -------------------- Pin Setup -------------------- //
 
-  // required pin setup for TESTPCB
-  // pinMode(PWDN_, OUTPUT);
-  // pinMode(START, OUTPUT);
-  // pinMode(SDN_, OUTPUT);
-  // pinMode(CS_, OUTPUT);
-  // digitalWrite(PWDN_, HIGH);
-  // digitalWrite(START, HIGH);
-  // digitalWrite(SDN_, HIGH);
-  // digitalWrite(CS_, LOW);
+  // required pin setup for TESTPCB (tied to VDD/VSS in final design)
+  pinMode(PWDN_, OUTPUT);
+  pinMode(START, OUTPUT);
+  pinMode(SDN_, OUTPUT);
+  pinMode(CS_, OUTPUT);
+  digitalWrite(PWDN_, HIGH);
+  digitalWrite(START, HIGH);
+  digitalWrite(SDN_, HIGH);
+  digitalWrite(CS_, LOW);
   
   // required pin setup for breadboard testing
   // pinMode(17, OUTPUT);

@@ -65,6 +65,7 @@ async def process_data(queue):
     global sample_index
     while True:
         data = await queue.get() # get data from queue when available
+        # print(len(data))
         # processing data
         try: 
             format_string = '<' + '8h' * PACKET_SIZE
@@ -72,14 +73,17 @@ async def process_data(queue):
     
             for i in range(0, PACKET_SIZE):
                 # timestamp = unpacked_data[i * 9]
-                timestamp = 0.01 * sample_index
-                channels = unpacked_data[i * 8: (1 + i) * 8] / 1000
-                # log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
-                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels) + "\n")
-                sample_index += 1
+                timestamp = 0.001 * sample_index
+                channels = unpacked_data[i * 8: (1 + i) * 8]
+                channels_scaled = [0,0,0,0,0,0,0,0]
                 for n in range(0,8):
+                    # scale recieved values
+                    channels_scaled[n] = channels[n] / 1000
                     # append new values
-                    channel_data[n].append(channels[n])
+                    channel_data[n].append(channels_scaled[n])
+                # log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels_scaled) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
+                log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels_scaled) + "\n")
+                sample_index += 1
 
         except Exception as e:
             print("Error decoding data " + str(e))

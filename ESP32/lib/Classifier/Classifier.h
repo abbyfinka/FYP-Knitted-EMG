@@ -19,7 +19,7 @@ class Classifier
     public:
         void extractFeatures(EMGData* frame, float* feature_array);
         float normalise(float data, int channel);
-        InterferenceOutput runInterference(float* input_data);
+        InterferenceOutput runInference(float* input_data);
         void initialise();
 
     private:

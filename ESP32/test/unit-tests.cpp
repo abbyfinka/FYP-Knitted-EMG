@@ -82,6 +82,21 @@ void test_skew_extraction(void) {
   }
 }
 
+void test_buffer(void) {
+  char msg[50];
+  vb_test.update(1);
+  snprintf(msg, sizeof(msg), "Failed at test 1");
+  TEST_ASSERT_EQUAL_INT8_MESSAGE(1, vb_test.findMajority(), msg);
+  vb_test.update(2);
+  vb_test.update(2);
+  snprintf(msg, sizeof(msg), "Failed at test 2");
+  TEST_ASSERT_EQUAL_INT8_MESSAGE(2, vb_test.findMajority(), msg);
+  vb_test.update(1);
+  vb_test.update(1);
+  snprintf(msg, sizeof(msg), "Failed at test 3");
+  TEST_ASSERT_EQUAL_INT8_MESSAGE(1, vb_test.findMajority(), msg);
+}
+
 int runUnityTests(void) {
   UNITY_BEGIN();
   RUN_TEST(test_iemg_extration);
@@ -91,6 +106,7 @@ int runUnityTests(void) {
   RUN_TEST(test_ln_rms_extraction);
   RUN_TEST(test_kurt_extraction);
   RUN_TEST(test_skew_extraction);
+  RUN_TEST(test_buffer);
   return UNITY_END();
 }
 
@@ -99,6 +115,7 @@ void setup() {
   // establishes connection with a board Serial interface
   Serial.begin(115200);
   delay(2000);
+  vb_test.initialise(5);
   gc.initialise();
   runUnityTests();
 }
