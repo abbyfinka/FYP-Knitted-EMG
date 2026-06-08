@@ -1,6 +1,7 @@
 # Development of a Flexible EMG Readout Board for Wearable Hand Movement Prediction
 
 Final Year Project - MEng Electrical and Electronic Engineering - Imperial College London
+
 Supervisor: Professor Kristel Fobelets
 
 ## Repository Structure
