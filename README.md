@@ -1,13 +1,13 @@
 # Development of a Flexible EMG Readout Board for Wearable Hand Movement Prediction
 
-Final Year Project
-MEng Electrical and Electronic Engineering
-Imperial College London
-Supervisor: Professor Kristel Fobelets
+* Final Year Project
+* MEng Electrical and Electronic Engineering
+* Imperial College London
+* Supervisor: Professor Kristel Fobelets
 
 This project aimed to design a low-cost, compact sEMG acquisition device to interface into a knitted armband, using knitted electrodes to acquire sEMG signals. The device achieves a high-sampling rate, with sufficient resolution, and robust wireless transmission with no dropped packets. An embedded classification pipeline was developed using an MLP architecture, aiming to classify six hand/wrist movements. The embedded implementation was not fully tested, however the model was validated using data collected from an alternative acquisition device, the Cyton Board. 
 
-Images of the device and signals visualised by the Python application can be seen below. This repository contains all of the code developed in this project, including the PCB files of the hardware developed. 
+This repository contains all of the code developed in this project, including the PCB files of the hardware developed. 
 
 ## Repository Structure
 
@@ -30,7 +30,7 @@ Visualising and logging data using this device is simple to set up with little i
 
 2. Run the Python script \texttt{EMGApp.py}. A GUI will open showing live data. An indicator light on the device will turn on when the device has successfully connected.
 
-3. Logs can be found at `FYP-Knitted-EMG/App/Logs/[TIMESTAMP]\_emg\_log.txt`
+3. Logs can be found at `FYP-Knitted-EMG/App/Logs/[TIMESTAMP]_emg_log.txt`
 
 If data is not visible, check the terminal. If there are any issues connecting to the ESP32, first check that there are no other Bluetooth devices connected to your device. If the issue persists check that the ESP32 is turned on and in range, this can be verified using an app such as nRF Connect.
 
