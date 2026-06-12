@@ -45,3 +45,25 @@ App/Logs/
 MATLAB/
 
 .pio/
+
+# KiCad backups and auto-saves
+*.bak
+*.bck
+*-bak
+*~
+_autosave-*
+
+# Routing, Netlists, and temporary files
+*.net
+*.dsn
+*.ses
+
+# User interface settings (window positions, active layers, etc.)
+*.kicad_prl
+
+# Caches, logs, and reports
+fp-info-cache
+*.log
+*.rpt
+*.drc
+*.erc
