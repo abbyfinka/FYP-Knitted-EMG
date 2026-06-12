@@ -228,6 +228,67 @@ xlabel('Frequency (Hz)');
 ylabel('Magnitude |P1(f)|');
 grid on;
 
-%%
 
+%% 
 
+load("C:\Imperial\FYP-Knitted-EMG\MATLAB\Data\AD8232-ch3-esp32notchfilter.mat")
+data = channel_data(:,3);
+
+% time domain
+
+figure;
+hold on;
+plot(esp_timestamp ./ 1000000, data, "LineWidth", 1.5);
+title("Plot of AD8232 Output in Time Domain with Knitted Electrodes");
+xlabel("Time / s");
+ylabel("Amplitude / mV");
+
+% frequency domain
+
+Y = fft(data);
+L = length(data);
+P2 = abs(Y / L);
+P1 = P2(1:floor(L/2)+1);
+P1(2:end-1) = 2 * P1(2:end-1);
+f = sampling_rate * (0:floor(L/2)) / L;
+
+figure;
+hold on;
+plot(f, P1, 'LineWidth', 1.5);
+title('Frequency Spectrum of AD8232 Output with Knitted Electrodes');
+xlabel('Frequency (Hz)');
+ylabel('Magnitude');
+grid on;
+
+%% 
+
+load("C:\Imperial\FYP-Knitted-EMG\MATLAB\Data\NoFiltering-StandardElectrodes-Data1.mat")
+data = channel_data(:,3);
+
+% time domain
+
+figure;
+hold on;
+plot(esp_timestamp ./ 1000000, data, "LineWidth", 1.5);
+title("Plot of EMG Output in Time Domain with Standard Electrodes");
+xlabel("Time / s");
+ylabel("Amplitude / mV");
+
+% frequency domain
+
+Y = fft(data);
+L = length(data);
+P2 = abs(Y / L);
+P1 = P2(1:floor(L/2)+1);
+P1(2:end-1) = 2 * P1(2:end-1);
+f = sampling_rate * (0:floor(L/2)) / L;
+
+figure;
+hold on;
+plot(f, P1, 'LineWidth', 1.5);
+title('Frequency Spectrum of EMG Output with Standard Electrodes');
+xlabel('Frequency (Hz)');
+ylabel('Magnitude');
+grid on;
+ylim([0,1]);
+xlim([0, 1000]);

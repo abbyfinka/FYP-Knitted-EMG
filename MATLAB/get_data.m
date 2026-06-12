@@ -1,8 +1,9 @@
 %% load EMG data
 
 clear; clc; 
-get_path = "C:\Imperial\FYP-Knitted-EMG\App\Logs\NoFiltering-StandardElectrodes-Data1.txt";
-lines = readlines(get_path);
+file_name = "hpf-standardelectrodes-x6gain-3";
+get_path = "C:\Imperial\FYP-Knitted-EMG\App\Logs\";
+lines = readlines(get_path + file_name + ".txt");
 lines = split(lines(1:end-1), ':');
 
 
@@ -22,10 +23,10 @@ end
 
 %% get sampling rate
 
-sampling_rate = 1 / ((round(esp_timestamp(2)/1000) - round(esp_timestamp(1)/1000)) / 1000);
+sampling_rate = 1000;
 
 %% store as .mat
 
-put_path = "C:\Imperial\FYP-Knitted-EMG\MATLAB\Data\NoFiltering-StandardElectrodes-Data1.mat";
+put_path = "C:\Imperial\FYP-Knitted-EMG\MATLAB\Data\" + file_name + ".mat";
 save(put_path, "laptop_timestamp", "esp_timestamp", "channel_data", "sampling_rate", "num_channels");
 
