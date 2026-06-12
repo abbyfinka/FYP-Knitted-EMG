@@ -1,8 +1,3 @@
-'''
-App to display EMG signals obtained by the device, data is received over serial
-Based on similar application: https://github.com/LilOz/emg-realtime-classification
-BLE interface based on: https://github.com/HamzaYslmn/ESP32_BT_Windows_Python/tree/main 
-'''
 import asyncio
 from datetime import datetime
 import threading
