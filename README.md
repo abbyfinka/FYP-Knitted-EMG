@@ -13,8 +13,8 @@ This repository contains all of the code developed in this project, including th
 
 This repo contains:
 - `\Hardware`: Contains PCB design files
-- `\App`: Python code to run GUI to visualise the signals
-- `\ESP32`: Firmware to run on ESP32 to acquire signals
+- `\App`: Python code to run GUI to visualise and log the signals
+- `\ESP32`: C++ firmware, developed using PlatformIO, to run on ESP32 and interface with the PCB to acquire signals
   - `\ESP32\test`: Unit tests for firmware
 - `\Classification`: Jupyter notebook to generate MLP model weights
 
