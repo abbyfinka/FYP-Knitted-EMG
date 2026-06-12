@@ -30,7 +30,7 @@ Visualising and logging data using this device is simple to set up with little i
 
    `cd FYP-Knitted-EMG/App`
 
-3. Run the Python script \texttt{EMGApp.py}. A GUI will open showing live data. An indicator light on the device will turn on when the device has successfully connected.
+3. Run the Python script `EMGApp.py`. A GUI will open showing live data. An indicator light on the device will turn on when the device has successfully connected.
 
 4. Logs can be found at `FYP-Knitted-EMG/App/Logs/[TIMESTAMP]_emg_log.txt`
 
