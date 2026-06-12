@@ -28,10 +28,15 @@ data_fist_espfilt = channel_data(:,3);
 
 %% plot data
 
-load("Data/Dataset1.mat");
+% load("Data/Dataset1.mat");
+load("Data/3xfist_espfiltering.mat")
 
-start_index = 6450;
-end_index = 9000;
+% start_index = 6450;
+% end_index = 9000;
+
+start_index = 1;
+end_index = 32632;
+
 
 figure('Position', [100, 100, 800, 600]);
 set(gca, 'FontSize', 14);
@@ -39,12 +44,11 @@ hold on;
 grid on;
 title({"EMG Signal of Fist Position after Hand at Rest,", "Raw Signal, x12 Gain on ADS1198 "})
 xlabel("Time / s");
-xlim([229.5, 232]);
+% xlim([229.5, 232]);
 ylabel("Measured Voltage / mV")
 plot(esp_timestamp(start_index:end_index) ./ 1000000, channel_data(start_index:end_index,3));
 % exportgraphics(gcf, 'Figures/Fist-Raw-No-Filters.pdf', 'ContentType', 'vector');
 
-%%
 
 b0 = 0.98478425;
 b1 = -1.87317095;
@@ -56,14 +60,10 @@ a2 = 0.96956849;
 b = [b0, b1, b2];
 a = [a0, a1, a2];
 
-% b = [0.99743147, -1.89722740, 0.99743147];
-% a = [1.00000000, -1.89722740, 0.99486295];
-
 x_nofiltering = channel_data(start_index:end_index,3);
-for i = 1:num_channels
-    x_bandpass_nofiltering = bandpass(x_nofiltering,[20 499],sampling_rate);
-    x_notch_nofiltering = filter(b, a, x_bandpass_nofiltering);
-end
+
+x_bandpass_nofiltering = bandpass(x_nofiltering,[20 450],sampling_rate);
+x_notch_nofiltering = filtfilt(b, a, x_bandpass_nofiltering);
 
 figure('Position', [100, 100, 800, 600]);
 set(gca, 'FontSize', 14);
@@ -71,8 +71,8 @@ hold on;
 grid on;
 title({"EMG Signal of Fist Position after Hand at Rest, Signal", "with Offline Notch and Bandpass Filters, x12 Gain on ADS1198"})
 xlabel("Time / s");
-xlim([229.5, 232]);
-ylim([-100, 100]);
+%xlim([229.5, 232]);
+%ylim([-100, 100]);
 ylabel("Measured Voltage / mV")
 plot(esp_timestamp(start_index:end_index) ./ 1000000, x_notch_nofiltering);
 % exportgraphics(gcf, 'Figures/Fist-Raw-w-Filters.pdf', 'ContentType', 'vector');
@@ -230,4 +230,4 @@ grid on;
 
 %%
 
-
+load("C:\Imperial\FYP-Knitted-EMG\MATLAB\Data\AD8232-ch3-standardelectrodes.mat)
