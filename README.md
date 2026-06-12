@@ -44,7 +44,7 @@ The AIfES can easily be updated with new weights, the steps required are detaile
    `git clone https://github.com/abbyfinka/FYP-Knitted-EMG`
    `cd FYP-Knitted-EMG/Classification`
 
-2. Setup EMGPromptApp, accessible [here]{https://github.com/LilOz/EMGPromptApp}, developed by Ayman Osman, to collect training data. User instructions can be found in the repository README.
+2. Setup EMGPromptApp, accessible [here](https://github.com/LilOz/EMGPromptApp), developed by Ayman Osman, to collect training data. User instructions can be found in the repository README.
 
     Update line 318 of `main.py`, to account for the increased sampling rate. 
     
