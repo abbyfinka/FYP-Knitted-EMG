@@ -25,12 +25,14 @@ This repo contains:
 Visualising and logging data using this device is simple to set up with little installation. The steps are detailed below.
 
 1. Clone the project repository by running the following commands in the terminal of the desired file location.
+
    `git clone https://github.com/abbyfinka/FYP-Knitted-EMG`
+
    `cd FYP-Knitted-EMG/App`
 
-2. Run the Python script \texttt{EMGApp.py}. A GUI will open showing live data. An indicator light on the device will turn on when the device has successfully connected.
+3. Run the Python script \texttt{EMGApp.py}. A GUI will open showing live data. An indicator light on the device will turn on when the device has successfully connected.
 
-3. Logs can be found at `FYP-Knitted-EMG/App/Logs/[TIMESTAMP]_emg_log.txt`
+4. Logs can be found at `FYP-Knitted-EMG/App/Logs/[TIMESTAMP]_emg_log.txt`
 
 If data is not visible, check the terminal. If there are any issues connecting to the ESP32, first check that there are no other Bluetooth devices connected to your device. If the issue persists check that the ESP32 is turned on and in range, this can be verified using an app such as nRF Connect.
 
@@ -41,18 +43,20 @@ To use the device for acquiring signals other than sEMG, the Python GUI can be c
 The AIfES can easily be updated with new weights, the steps required are detailed below.
 
 1. Clone the project repository by running the following commands in the terminal of the desired file location.
+
    `git clone https://github.com/abbyfinka/FYP-Knitted-EMG`
+
    `cd FYP-Knitted-EMG/Classification`
 
-2. Setup EMGPromptApp, accessible [here](https://github.com/LilOz/EMGPromptApp), developed by Ayman Osman, to collect training data. User instructions can be found in the repository README.
+3. Setup EMGPromptApp, accessible [here](https://github.com/LilOz/EMGPromptApp), developed by Ayman Osman, to collect training data. User instructions can be found in the repository README.
 
     Update line 318 of `main.py`, to account for the increased sampling rate. 
     
     Corrected line: `time_step = 0.001`
 
-3. Collect data with this application. Run the developed Python GUI instead of the OpenBCI software.
+4. Collect data with this application. Run the developed Python GUI instead of the OpenBCI software.
 
-4. Upload training data and run `MLP-Training-for-ESP32.ipynb`. The last cell will print a string that can be copied into `FYP-Knitted-EMG/ESP32/lib/Weights/weights.h`
+5. Upload training data and run `MLP-Training-for-ESP32.ipynb`. The last cell will print a string that can be copied into `FYP-Knitted-EMG/ESP32/lib/Weights/weights.h`
 
-5. Upload the new firmware to the ESP32. Classification output is available over BLE in the GUI.
+6. Upload the new firmware to the ESP32. Classification output is available over BLE in the GUI.
 
