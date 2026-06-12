@@ -68,7 +68,7 @@ void Classifier::extractFeatures(EMGData frame[], float features[])
         features[c * 7 + 4] = log(sqrt(rms[c] / WINDOW_SIZE));
         features[c * 7 + 5] = (kurt[c] / WINDOW_SIZE) - 3;
         features[c * 7 + 6] = skew[c] / WINDOW_SIZE;
-        Serial.println(features[c * 7 + 6]);
+        //Serial.println(features[c * 7 + 6]);
     }
 
     //Serial.printf("End %lu\n", (micros()-startTime));

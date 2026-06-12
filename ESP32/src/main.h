@@ -22,38 +22,6 @@
 #define NA1     -1.89236681f
 #define NA2     0.98975221f
 
-// 100 Hz notch, Q = 30
-#define NB0_2   0.99029862f
-#define NB1_2   -1.60233682f
-#define NB2_2   0.99029862f
-#define NA0_2   1.0f
-#define NA1_2   -1.60233682
-#define NA2_2   0.98059724
-
-// 150 Hz notch
-#define NB0_3   0.98669577f
-#define NB1_3   -1.15993045f
-#define NB2_3   0.98669577f
-#define NA0_3   1.0f
-#define NA1_3   -1.15993045f
-#define NA2_3   0.97339155f
-
-// 200 Hz notch
-#define NB0_4   0.98439639f
-#define NB1_4   -0.60839043f
-#define NB2_4   0.98439639f
-#define NA0_4   1.0f
-#define NA1_4   -0.60839043f
-#define NA2_4   0.96879278f
-
-// 250 Hz notch
-#define NB0_5   0.98360656f
-#define NB1_5   0.0f
-#define NB2_5   0.98360656f
-#define NA0_5   1.0f
-#define NA1_5   0.0f
-#define NA2_5   0.96721311f
-
 // high pass 499 Hz cutoff, Q = 10
 #define HB0     0.91495789f
 #define HB1     -1.82991579f
@@ -69,7 +37,5 @@
 #define LA0    1.0f // normalised
 #define LA1    1.99111296f
 #define LA2    0.99115227f
-
-
 
 #endif // MAIN_H

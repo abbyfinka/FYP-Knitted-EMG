@@ -18,7 +18,9 @@
 #define TEST_DATA_EN            0       // Flag to control sending test data instead of real ADS119X data
 #define NOTCH_EN                1       // Flag to control whether to apply the notch filter
 #define BANDPASS_EN             1       // Flag to control whether to apply bandpass filter
-#define CLASSIFY                0       // Flag to enable embedded classification
+
+
+//#define CLASSIFY                        // Flag to enable embedded classification
 
 #define CONFIDENCE_THRESHOLD    60
 
@@ -49,10 +51,6 @@ VotingBuffer<int8_t> vb;
 
 // initialising a filter for each channel
 BiQuadFilterDF1<float> biquad_notch_filter_50[8];
-BiQuadFilterDF1<float> biquad_notch_filter_100[8];
-BiQuadFilterDF1<float> biquad_notch_filter_150[8];
-BiQuadFilterDF1<float> biquad_notch_filter_200[8];
-BiQuadFilterDF1<float> biquad_notch_filter_250[8];
 BiQuadFilterDF1<float> biquad_hp_filter[8];
 BiQuadFilterDF1<float> biquad_lp_filter[8];
 EMA<float> ema[8];
@@ -61,18 +59,18 @@ EMGData currentWindow[WINDOW_SIZE] = {0};
 EMGData nextWindow[WINDOW_SIZE] = {0};
 
 // Pin definitions TESTPCB
-#define CS_           10     // chip select pin
-#define DRDY_         9      // data ready pin
-#define RESET_        46     // reset pin
-#define PWDN_         3      // power down pin
-#define START         8      // start pin
-#define SDN_          18     // shutdown pin
-#define LED_PIN       15     // LED pin for debugging
+// #define CS_           10     // chip select pin
+// #define DRDY_         9      // data ready pin
+// #define RESET_        46     // reset pin
+// #define PWDN_         3      // power down pin
+// #define START         8      // start pin
+// #define SDN_          18     // shutdown pin
+// #define LED_PIN       15     // LED pin for debugging
 
 // Pin definitions FINALPCB
-// #define DRDY_         9      // data ready pin
-// #define RESET_        8     // reset pin
-// #define LED_PIN       15     // LED pin for debugging
+#define DRDY_         9      // data ready pin
+#define RESET_        8     // reset pin
+#define LED_PIN       15     // LED pin for debugging
 
 class MyServerCallbacks:
 
@@ -141,10 +139,6 @@ void parseADSDataTask(void * pvParameters)
         if (NOTCH_EN && !TEST_DATA_EN) 
         {
           convertedData = biquad_notch_filter_50[i](convertedData); // applying notch filter
-          convertedData = biquad_notch_filter_100[i](convertedData);
-          convertedData = biquad_notch_filter_150[i](convertedData);
-          convertedData = biquad_notch_filter_200[i](convertedData);
-          convertedData = biquad_notch_filter_250[i](convertedData);
         }
 
         if (BANDPASS_EN && !TEST_DATA_EN)
@@ -162,7 +156,6 @@ void parseADSDataTask(void * pvParameters)
 
       // Creating instance of EMGData from next set of data
       // emg.timestamp = data1->timestamp;
-      // emg.timestamp = 0;
       memcpy(&emg.channelData, channelData, sizeof(channelData));
 
       // Add data to buffer for BLE transfer
@@ -195,7 +188,9 @@ void handleTransmitTask(void * pvParameters)
     }
 
     pDataCharacteristic->setValue((uint8_t*)&dataToSend, sizeof(TransmitData)); // Set the characteristic value
-    if (deviceConnected && !CLASSIFY) { pDataCharacteristic->notify(); } // Notify connected clients
+    #ifndef CLASSIFY
+      if (deviceConnected) { pDataCharacteristic->notify(); } // Notify connected clients
+    #endif
 
   }
 }
@@ -221,14 +216,6 @@ void handleFeatureExtractionTask(void * pvParameters)
         }
       }
     }
-
-    // verifying windows
-    // for (int i = 0; i < WINDOW_SIZE; i++)
-    // {
-    //   Serial.print(nextWindow[i].channelData[3]);
-    //   Serial.print(", ");
-    //   Serial.println(" ");
-    // }
 
     memcpy(currentWindow, nextWindow, sizeof(EMGData)); // Copy next window to current window
     float features[N_FEATURES * 8] = {0};
@@ -256,10 +243,10 @@ void handleClassificationTask(void * pvParameters)
       if (classification.probability > CONFIDENCE_THRESHOLD){
         vb.update(classification.pose);
       }
-      Serial.println(classification.probability);
+      //Serial.println(classification.probability);
       
       int8_t currentPose = vb.findMajority();
-      Serial.println(currentPose);
+      //Serial.println(currentPose);
       // Serial.println(classification.pose);
       // Serial.println(classification.probability);
       pGestureCharacteristic->setValue((uint8_t*)&currentPose, sizeof(int8_t)); // Set the characteristic value
@@ -277,10 +264,14 @@ void readADSTask(void * pvParameters)
   {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // Wait until notified by the DRDY_ ISR
     // pdTRUE clears missed notifications rather than accumulating in a queue
+    // Reading data from the ADS1198
 
     ADS.readChannelData();
     dataPacket* channelData = ADS.getAllChannelData(); // Get all channel data
     xRingbufferSend(bleDataBufferRaw, channelData, sizeof(dataPacket), 0); // Send data to buffer
+
+
+    
   }
 }
 
@@ -317,10 +308,6 @@ void setup()
       for (int i = 0; i < 8; i++)
       {
         biquad_notch_filter_50[i] = BiQuadFilterDF1<float>({NB0, NB1, NB2}, {NA0, NA1, NA2});
-        biquad_notch_filter_100[i] = BiQuadFilterDF1<float>({NB0_2, NB1_2, NB2_2}, {NA0_2, NA1_2, NA2_2});
-        biquad_notch_filter_150[i] = BiQuadFilterDF1<float>({NB0_3, NB1_3, NB2_3}, {NA0_3, NA1_3, NA2_3});
-        biquad_notch_filter_200[i] = BiQuadFilterDF1<float>({NB0_4, NB1_4, NB2_4}, {NA0_4, NA1_4, NA2_4});
-        biquad_notch_filter_250[i] = BiQuadFilterDF1<float>({NB0_5, NB1_5, NB2_5}, {NA0_5, NA1_5, NA2_5});
 
       }
     }
@@ -414,14 +401,14 @@ void setup()
   // -------------------- Pin Setup -------------------- //
 
   // required pin setup for TESTPCB (tied to VDD/VSS in final design)
-  pinMode(PWDN_, OUTPUT);
-  pinMode(START, OUTPUT);
-  pinMode(SDN_, OUTPUT);
-  pinMode(CS_, OUTPUT);
-  digitalWrite(PWDN_, HIGH);
-  digitalWrite(START, HIGH);
-  digitalWrite(SDN_, HIGH);
-  digitalWrite(CS_, LOW);
+  // pinMode(PWDN_, OUTPUT);
+  // pinMode(START, OUTPUT);
+  // pinMode(SDN_, OUTPUT);
+  // pinMode(CS_, OUTPUT);
+  // digitalWrite(PWDN_, HIGH);
+  // digitalWrite(START, HIGH);
+  // digitalWrite(SDN_, HIGH);
+  // digitalWrite(CS_, LOW);
   
   // required pin setup for breadboard testing
   // pinMode(17, OUTPUT);
@@ -444,7 +431,7 @@ void setup()
   ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_1);
   if (!TEST_DATA_EN) {
     ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_12); // setting gain to 12 for all channels
-    // ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_6);
+    //ADS.setAllChannelGain(ADS119X_CHnSET_GAIN_6);
     ADS.setAllChannelMux(ADS119X_CHnSET_MUX_NORMAL); 
     ADS.enableRLD();
   }
@@ -462,10 +449,10 @@ void setup()
   xTaskCreatePinnedToCore(handleBLETask, "UpdateBLE", 5000, NULL, 2, &handleBLE, 0);
   xTaskCreatePinnedToCore(handleTransmitTask, "Transmit", 5000, NULL, 2, &handleTransmit, 0);
   xTaskCreatePinnedToCore(readADSTask, "ReadADS", 5000, NULL, 1, &handleReadADS, 1);
-  if (CLASSIFY){
+  #ifdef CLASSIFY
     xTaskCreatePinnedToCore(handleFeatureExtractionTask, "FeatureExtraction", 10000, NULL, 1, &handleFeature, 0);
     xTaskCreatePinnedToCore(handleClassificationTask, "Classify", 10000, NULL, 2, &handleInterference, 0);
-  }
+  #endif
   
 
 }
