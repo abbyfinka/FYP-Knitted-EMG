@@ -76,7 +76,7 @@ async def process_data(queue):
                     channels_scaled[n] = channels[n] / 1000
                     # append new values
                     channel_data[n].append(channels_scaled[n])
-                log_file.write(str(timestamp) + ", " + str(sample_index) + ", " + ", ".join(str(c) for c in channels_scaled) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
+                log_file.write(str(sample_index) + ", " + ", ".join(str(c) for c in channels_scaled) + ", " + ", ".join(str(c) for c in [0.0] * 13) + ", " + str(datetime.now().timestamp()) +  ", " + str(0.0) + ", " + str(datetime.now()) + "\n")
                 # log_file.write(datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ": " + str(timestamp) + ": " + str(channels_scaled) + "\n")
                 sample_index += 1
 
