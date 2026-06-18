@@ -13,8 +13,8 @@ This repository contains all of the code developed in this project, including th
 
 This repo contains:
 - `\Hardware`: Contains PCB design files
-- `\App`: Python code to run GUI to visualise the signals
-- `\ESP32`: Firmware to run on ESP32 to acquire signals
+- `\App`: Python code to run GUI to visualise and log the signals
+- `\ESP32`: C++ firmware, developed using PlatformIO, to run on ESP32 and interface with the PCB to acquire signals
   - `\ESP32\test`: Unit tests for firmware
 - `\Classification`: Jupyter notebook to generate MLP model weights
 
@@ -30,7 +30,7 @@ Visualising and logging data using this device is simple to set up with little i
 
    `cd FYP-Knitted-EMG/App`
 
-3. Run the Python script \texttt{EMGApp.py}. A GUI will open showing live data. An indicator light on the device will turn on when the device has successfully connected.
+3. Run the Python script `EMGApp.py`. A GUI will open showing live data. An indicator light on the device will turn on when the device has successfully connected.
 
 4. Logs can be found at `FYP-Knitted-EMG/App/Logs/[TIMESTAMP]_emg_log.txt`
 
