@@ -60,3 +60,11 @@ The AIfES can easily be updated with new weights, the steps required are detaile
 
 6. Upload the new firmware to the ESP32. Classification output is available over BLE in the GUI.
 
+### Using the Device
+
+Firmware for signal acquisition is already uploaded to the device, for any changes, connect the programming PCB to upload new code.
+
+1. Connect LiPo battery to switch on device, red LED should turn on.
+2. Click the RESET button to start the code. Blue LED should flash on and off. If blue LED stays on ADS1198 has not been initialised correctly, press RESET again.
+3. Connect to the device as described above, blue LED will turn on to indicate BLE connection
+
