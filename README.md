@@ -66,7 +66,7 @@ Firmware for signal acquisition is already uploaded to the device, for any chang
 
 1. Connect LiPo battery to switch on device, red LED will turn on to indicate power.
    
-2. Click the RESET button to start the code. Blue LED should flash on and off. If blue LED stays on ADS1198 has not been initialised correctly, press RESET again.
+2. Click the RESET button to start the code. Blue LED should flash on and off. If the blue LED stays on, the ADS1198 has not been initialised correctly, press RESET again.
    
 3. Connect to the device as described above, blue LED will turn on to indicate BLE connection
 
