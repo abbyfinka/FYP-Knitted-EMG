@@ -416,14 +416,20 @@ void setup()
 
   // LED on Test Board
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW); // Turn off LED initially
+  digitalWrite(LED_PIN, HIGH); // Turn off LED initially
   
   // -------------------- ADS Initialisation -------------------- //
 
+
   delay(100); // Short delay to ensure pins are set before initializing ADS
-  Serial.print(ADS.begin() ? "ADS119X initialized successfully" : "Failed to initialize ADS119X");
+  bool success = ADS.begin();
+  if (success) {
+    digitalWrite(LED_PIN, LOW); // Turn off LED initially
+  }
+  Serial.print(success ? "ADS119X initialized successfully" : "Failed to initialize ADS119X");
   Serial.println();
   delay(100); // Short delay to ensure ADS is ready before configuration
+
 
   // send ADS setup commands
   ADS.sendCommand(ADS119X_CMD_SDATAC); // pause data conversion to send config commands
